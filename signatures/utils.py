@@ -60,7 +60,9 @@ def buildCTransaction(tx_json: dict, queue: Queue):
         CTxWitness(witnesses),
         out_queue=queue,
         extras={
+            "chain": tx_json["chain"],
             "transaction_hash": tx_json["transaction_hash"],
+            "block_timestamp": tx_json["block_timestamp"]
         },
     )
 

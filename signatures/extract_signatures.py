@@ -31,8 +31,10 @@ def save_data(data: list, output_dir: str, file_id: int):
     df = pd.DataFrame(
         data,
         columns=[
+            "chain",
             "transaction_hash",
             "input_index",
+            "block_timestamp",
             "r",
             "s",
             "message digest",
