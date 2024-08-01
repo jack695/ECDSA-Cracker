@@ -76,3 +76,40 @@ def derive_private_key_from_repeated_nonces(
     raise ValueError(
         "The nonce and the private key could not be recovered: the input signatures are probably invalid."
     )
+
+
+def derive_private_key_from_known_nonce(
+    r: int, s: int, h: int, nonce: int, pubkey: str, curve: Curve
+):
+    order = curve.order
+
+    expected_vk = ecdsa.VerifyingKey.from_string(bytes.fromhex(pubkey), curve=curve)
+    # We have to be careful that for a given nonce and given signature, 2 private keys are valid, see ecdsa_tutorial (mirror_key)
+    priv_key = pow(r, -1, order) * (s * nonce - h) % order
+    sk = ecdsa.SigningKey.from_secret_exponent(
+        secexp=priv_key, curve=curve, hashfunc=None
+    )
+    vk = sk.get_verifying_key()
+
+    if vk != expected_vk:
+        nonce = (order - nonce) % order
+        # Let's fetch the alternative private key, that could have signed that message
+        priv_key = (pow(r, -1, order) * s * (2 * nonce) + priv_key) % order
+        sk = ecdsa.SigningKey.from_secret_exponent(
+            secexp=priv_key, curve=curve, hashfunc=None
+        )
+        vk = sk.get_verifying_key()
+
+        assert vk == expected_vk
+
+    return priv_key
+
+
+def derive_nonce_from_known_private_key(
+    r: int, s: int, h: int, d: int, curve=ecdsa.SECP256k1
+):
+    nonce = (pow(s, -1, curve.order) * (h + r * d)) % curve.order
+
+    assert (nonce * curve.generator).x() == r
+
+    return nonce

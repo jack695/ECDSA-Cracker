@@ -1,7 +1,15 @@
 import ecdsa
 from ecdsa.curves import Curve
 from keys_recovery.SignatureDB import SignatureDB, SignatureFolder
-from keys_recovery.ecdsa_helper import derive_private_key_from_repeated_nonces
+from keys_recovery.ecdsa_helper import (
+    derive_nonce_from_known_private_key,
+    derive_private_key_from_known_nonce,
+    derive_private_key_from_repeated_nonces,
+)
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
 
 
 class ECDSABreaker:
@@ -14,10 +22,12 @@ class ECDSABreaker:
         self.curve = curve
 
     def crack(self):
-        # ROUND 0: Derive nonces and private keys from repeated nonces
+        logger.info("ROUND 0: Derive nonces and private keys from repeated nonces")
         self.__crack_repeated_nonces()
 
-        # ROUND 1: Derive nonces from known private keys and private keys from known nonces
+        logger.info(
+            "ROUND 1: Derive nonces from known private keys and private keys from known nonces"
+        )
         self.__crack_from_known_nonces_and_keys()
 
     def __crack_repeated_nonces(self):
@@ -31,45 +41,59 @@ class ECDSABreaker:
         )
         repeated_nonces_df["r_chain"] = repeated_nonces_df["chain"]
 
-        self.db.expand_cracked_keys(
-            repeated_nonces_df[
-                ["chain", "vulnerable_timestamp", "r", "pubkey", "privkey", "r_chain"]
-            ]
-        )
-
-        self.db.expand_known_nonce(
-            repeated_nonces_df[
-                ["r", "nonce", "chain", "vulnerable_timestamp"]
-            ].set_index(keys="r")
-        )
+        self.db.expand_cracked_keys(repeated_nonces_df)
+        self.db.expand_known_nonce(repeated_nonces_df)
 
     def __crack_from_known_nonces_and_keys(self):
         crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()
 
-        """while len(crackable_keys.index) > 0 or len(crackable_nonces.index) > 0:
-            crackable_keys["private_key"] = crackable_keys.apply(
-                derive_private_key_from_known_nonce, axis=1
+        while len(crackable_keys.index) > 0 or len(crackable_nonces.index) > 0:
+            crackable_keys["privkey"] = crackable_keys.apply(
+                lambda row: derive_private_key_from_known_nonce(
+                    row["r"],
+                    row["s"],
+                    row["h"],
+                    row["nonce"],
+                    row["pubkey"],
+                    self.curve,
+                ),
+                axis=1,
             )
+            self.db.expand_cracked_keys(crackable_keys)
 
-            crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()"""
+            crackable_nonces["nonce"] = crackable_nonces.apply(
+                lambda row: derive_nonce_from_known_private_key(
+                    row["r"],
+                    row["s"],
+                    row["h"],
+                    row["privkey"],
+                ),
+                axis=1,
+            )
+            self.db.expand_known_nonce(crackable_nonces)
+
+            crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()
+
+    def __crack_from_sig_equation_system(self):
+        cycle_signatures = self.db.get_cycle_signatures()
 
 
 if __name__ == "__main__":
     signature_folders = [
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/bch",
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/bch",
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/btc"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/btc"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/dash"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/dash"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/ltc"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/ltc"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/doge"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/doge"
         ),
     ]
 
