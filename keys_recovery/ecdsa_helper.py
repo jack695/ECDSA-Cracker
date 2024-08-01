@@ -1,6 +1,9 @@
+from copy import deepcopy
+import itertools
 from typing import Callable
 import ecdsa
 from ecdsa.curves import Curve
+from sympy import Matrix
 
 
 def is_signature_valid(
@@ -113,3 +116,46 @@ def derive_nonce_from_known_private_key(
     assert (nonce * curve.generator).x() == r
 
     return nonce
+
+
+def solve(m, b, pos, pubkeys, r, curve=ecdsa.SECP256k1):
+    m = deepcopy(m)
+
+    for x in pos:
+        for j in range(len(b) // 2):
+            m[x][j] = -m[x][j] % ecdsa.SECP256k1.order if m[x][j] != 0 else 0
+
+    m = Matrix(m)
+    b = Matrix(b)
+    sol = m.inv_mod(ecdsa.SECP256k1.order) * b % ecdsa.SECP256k1.order
+
+    private_keys = {}
+    for s in sol[len(b) // 2 :]:
+        sk = ecdsa.SigningKey.from_secret_exponent(
+            secexp=s,
+            curve=ecdsa.SECP256k1,
+        )
+        vk = sk.get_verifying_key()
+        pubkey = vk.to_string("compressed").hex()
+        private_keys[pubkey] = s
+
+    if set(private_keys.keys()) == set(pubkeys):
+        nonces = {}
+        for nonce in sol[: len(b) // 2]:
+            r = (curve.generator * nonce).x()
+            nonces[r] = nonce
+
+        return nonces, private_keys
+    return None, None
+
+
+def solve_for_all_alterations(m, b, pubkeys, r):
+    pos_s = [i for i in range(len(b))]
+    for L in range(len(pos_s) + 1):
+        for subset in itertools.combinations(pos_s, L):
+            nonces, priv_keys = solve(m, b, subset, pubkeys, r)
+            if nonces and priv_keys:
+                assert set(nonces.keys()) == set(r)
+                return nonces, priv_keys
+
+    raise ValueError("The private keys could not be recovered.")

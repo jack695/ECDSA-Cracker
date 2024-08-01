@@ -7,6 +7,9 @@ from keys_recovery.ecdsa_helper import is_signature_valid
 from ecdsa.curves import Curve
 import logging
 import networkx as nx
+from lib.script_parser.utxo_utils.encoding.address import (
+    generate_flatten_utxo_addresses,
+)
 import pandera as pa
 from pandera.typing import DataFrame
 
@@ -67,6 +70,18 @@ CrackableNoncesSchema = pa.DataFrameSchema(
     }
 )
 
+UncrackedCyclingSignaturesSchema = pa.DataFrameSchema(
+    {
+        "chain": pa.Column(str),
+        "block_timestamp": pa.Column("datetime64[ms, UTC]"),
+        "r": pa.Column(object),
+        "s": pa.Column(object),
+        "h": pa.Column(object),
+        "pubkey": pa.Column(str),
+        "cycle_id": pa.Column("int64"),
+    }
+)
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
@@ -87,9 +102,10 @@ class SignatureDB:
         self._cracked_keys_df = pd.DataFrame()
         self._known_nonces_df = pd.DataFrame()
 
-        logger.info(
-            f"{self._uncracked_keys_df["pubkey"].nunique()} distinct private keys to recover."
-        )
+        self._n_pubkeys = self._uncracked_keys_df["pubkey"].nunique()
+        self._n_r = self._uncracked_keys_df["r"].nunique()
+        logger.info(f"{self._n_pubkeys} distinct private keys to recover.")
+        logger.info(f"{self._n_r} distinct nonces to recover.")
 
     def find_repeated_nonces(self) -> pd.DataFrame:
         # Group by pubkey and r. Keep two records for every row.
@@ -128,8 +144,9 @@ class SignatureDB:
             .groupby(by="r", sort=False)
             .head(1)
         )
+
         logger.info(
-            f"{len(self._known_nonces_df.index)} distinct 'r' vulnerable values."
+            f"{'Nonces':15s}: {len(self._known_nonces_df.index) / self._n_r * 100:.2f}% - {len(self._known_nonces_df.index)} over {self._n_r} nonces recovered."
         )
 
     def expand_cracked_keys(self, cracked_keys_df: pd.DataFrame):
@@ -150,10 +167,7 @@ class SignatureDB:
         )
 
         logger.info(
-            f"{self._uncracked_keys_df["pubkey"].nunique()} distinct private keys remain to recover."
-        )
-        logger.info(
-            f"{self._cracked_keys_df["pubkey"].nunique()} distinct private keys recovered."
+            f"{'Private keys':15s}: {self._cracked_keys_df["pubkey"].nunique() / self._n_pubkeys * 100:.2f}% - {self._cracked_keys_df["pubkey"].nunique()} over {self._n_pubkeys} private keys recovered."
         )
 
     def get_crackable_keys_and_nonces(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -194,46 +208,53 @@ class SignatureDB:
 
         return crackable_keys, crackable_nonces
 
-    def get_cycle_signatures(self) -> list[DataFrame]:
+    def get_cycle_signatures(self) -> pd.DataFrame:
         """Return a list of dataframes, each of them represents a cycle among the bi-partite graph of uncracked keys and uncracked 'r' values.
 
         A cycle in this bi-partite graph going through n distinct public keys and n distinct r values is composed of 2n signatures.
         Thus, this set of 2n signatures can be translated as a system of linear equations that has a unique solution.
         """
-
-        def get_rows_from_cycle(df, cycle):
-            to_fetch = []
-
-            for node, next_node in zip(cycle, cycle[1:] + [cycle[0]]):
-                if ":" in node:
-                    pk = node.split(":")[1]
-                    r = next_node
-                else:
-                    pk = next_node.split(":")[1]
-                    r = node
-                to_fetch.append((pk, r))
-
-            return df.loc[to_fetch].sort_index().reset_index()
-
-        uncracked_keys_df = self._uncracked_keys_df
-        uncracked_keys_df["pubkey_chain"] = (
-            uncracked_keys_df["chain"] + ":" + uncracked_keys_df["pubkey"]
-        )
-
         # Look for basis cycles
         G = nx.Graph()
-        G.add_edges_from(uncracked_keys_df[["pubkey_chain", "r"]].to_numpy().tolist())
+        G.add_edges_from(self._uncracked_keys_df[["pubkey", "r"]].to_numpy().tolist())
         cycles = nx.cycle_basis(G)
         logger.info(
             f"{len(cycles)} basis cycles have been found in the bi-partite graph of uncracked keys."
         )
 
-        cycle_rows, indexed_df = [], uncracked_keys_df.set_index(keys=["pubkey", "r"])
-        for cycle in cycles:
-            rows = get_rows_from_cycle(indexed_df, cycle)
-            UncrackedSignaturesSchema.validate(rows)
-            cycle_rows.append(rows)
+        indices_to_fetch = []
+        for cycle_id, cycle in enumerate(cycles):
+            for node, next_node in zip(cycle, cycle[1:] + [cycle[0]]):
+                # TODO: Check Panderas docs to access the type of "pubkey" from the schema.
+                pk, r = (node, next_node) if type(node) is str else (next_node, node)
+                indices_to_fetch.append((cycle_id, pk, r))
+        indexes_to_fetch_df = pd.DataFrame(
+            indices_to_fetch, columns=["cycle_id", "pubkey", "r"]
+        )
+
+        cycle_rows = self._uncracked_keys_df.merge(
+            indexes_to_fetch_df, how="inner", on=["r", "pubkey"]
+        ).drop_duplicates()
+        UncrackedCyclingSignaturesSchema.validate(cycle_rows)
         return cycle_rows
+
+    def save_addresses(self, out_file: str):
+        all_private_keys_with_addresses = (
+            self._cracked_keys_df[["pubkey"]].drop_duplicates().reset_index()
+        )
+        all_private_keys_with_addresses[
+            ["chain_address", "pubkey_format", "address"]
+        ] = all_private_keys_with_addresses.apply(
+            lambda row: generate_flatten_utxo_addresses(row["pubkey"]),
+            axis=1,
+            result_type="expand",
+        )
+        all_private_keys_with_addresses = all_private_keys_with_addresses.explode(
+            ["chain_address", "pubkey_format", "address"]
+        )
+        all_private_keys_with_addresses[
+            ["address", "chain_address", "pubkey", "pubkey_format"]
+        ].to_parquet(out_file)
 
     def _fetch_data(self, signature_folders: list[SignatureFolder]) -> pd.DataFrame:
         chunks = []
