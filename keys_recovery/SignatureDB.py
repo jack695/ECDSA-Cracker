@@ -19,43 +19,43 @@ class SignatureDB:
     UNCRACKED_SIGNATURES_DTYPES = {
         "chain": "string[pyarrow]",
         "block_timestamp": "datetime64[s, UTC]",
-        "r": "string[pyarrow]",
-        "s": "string[pyarrow]",
-        "message digest": "string[pyarrow]",
+        "r": "object",
+        "s": "object",
+        "message digest": "object",
         "pubkey": "string[pyarrow]",
     }
 
     CRACKED_SIGNATURES_DTYPES = {
         "chain": "string[pyarrow]",
         "vulnerable_timestamp": "datetime64[s, UTC]",
-        "r": "string[pyarrow]",
+        "r": "object",
         "pubkey": "string[pyarrow]",
-        "privkey": "string[pyarrow]",
+        "privkey": "object",
         "r_chain": "string[pyarrow]",
     }
 
     KNOWN_NONCES_DTYPES = {
-        "r": "string[pyarrow]",
-        "nonce": "object",  # Let's use the native python int to support any size
+        "r": "object",
+        "nonce": "object",
         "r_chain": "string[pyarrow]",
         "vulnerable_timestamp": "datetime64[s, UTC]",
     }
 
     CRACKABLE_SIGNATURES_DTYPES = {
         "chain": "string[pyarrow]",
-        "r": "string[pyarrow]",
-        "s": "string[pyarrow]",
-        "message digest": "string[pyarrow]",
+        "r": "object",
+        "s": "object",
+        "message digest": "object",
         "pubkey": "string[pyarrow]",
-        "nonce": "object",  # Let's use the native python int to support any size
+        "nonce": "object",
         "r_chain": "string[pyarrow]",
         "vulnerable_timestamp": "datetime64[s, UTC]",
     }
 
     CRACKABLE_NONCES_DTYPES = {
-        "r": "string[pyarrow]",
-        "s": "string[pyarrow]",
-        "message digest": "string[pyarrow]",
+        "r": "object",
+        "s": "object",
+        "message digest": "object",
         "pubkey": "string[pyarrow]",
         "vulnerable_timestamp": "datetime64[s, UTC]",
         "privkey": "string[pyarrow]",
@@ -83,14 +83,14 @@ class SignatureDB:
         # Group by pubkey and r. Keep two records for every row.
         grouped_df = (
             self._uncracked_keys_df.sort_values(by=["block_timestamp"])
-            .groupby(by=["pubkey", "r", "s", "message digest"], sort=False)
+            .groupby(by=["pubkey", "r", "s", "h"], sort=False)
             .head(1)
             .groupby(by=["pubkey", "r"], sort=False)
             .aggregate(
                 s_cnt=("s", "nunique"),
-                digest_cnt=("message digest", "nunique"),
+                digest_cnt=("h", "nunique"),
                 s=("s", lambda s: s.drop_duplicates().head(2)),
-                digests=("message digest", lambda s: s.drop_duplicates().head(2)),
+                digests=("h", lambda s: s.drop_duplicates().head(2)),
                 chain=("chain", lambda s: s.drop_duplicates()),
                 vulnerable_timestamp=(
                     "block_timestamp",
@@ -201,4 +201,11 @@ class SignatureDB:
             )
             chunks.append(chunk)
 
-        return pd.concat(chunks)
+        sig_df = pd.concat(chunks)
+        # Let's use the native python int to support any size to support different schemes and curve despite the loss of performance.
+        sig_df["r"] = sig_df["r"].apply(lambda r: int(r, 16))
+        sig_df["s"] = sig_df["s"].apply(lambda r: int(r, 16))
+        sig_df["h"] = sig_df["message digest"].apply(lambda r: int(r, 16))
+        sig_df.drop(columns=["message digest"])
+
+        return sig_df

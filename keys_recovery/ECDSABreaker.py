@@ -24,7 +24,7 @@ class ECDSABreaker:
         repeated_nonces_df = self.db.find_repeated_nonces()
         repeated_nonces_df[["nonce", "privkey"]] = repeated_nonces_df.apply(
             lambda row: derive_private_key_from_repeated_nonces(
-                row["r"], row["s"], row["digests"], self.curve
+                row["r"], row["s"], row["digests"], row["pubkey"], self.curve
             ),
             axis=1,
             result_type="expand",
@@ -57,26 +57,19 @@ class ECDSABreaker:
 if __name__ == "__main__":
     signature_folders = [
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/bch",
-            check_signatures=True,
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/bch",
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/btc"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/btc"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/dash"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/dash"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/ltc"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/ltc"
         ),
         SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/doge"
-        ),
-    ]
-
-    signature_folders = [
-        SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/doge"
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/new_signatures/doge"
         ),
     ]
 

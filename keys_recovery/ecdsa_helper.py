@@ -24,7 +24,7 @@ def is_signature_valid(
         return False
 
 
-def verify_private_keys(pubkey: str, privkey: str, curve):
+def verify_private_key(pubkey: str, privkey: int, curve: Curve):
     vk_expected = ecdsa.VerifyingKey.from_string(bytes.fromhex(pubkey), curve=curve)
     sk = ecdsa.SigningKey.from_secret_exponent(secexp=privkey, curve=curve)
     vk = sk.get_verifying_key()
@@ -32,26 +32,20 @@ def verify_private_keys(pubkey: str, privkey: str, curve):
     assert vk == vk_expected
 
 
-def verify_nonce(r: str, nonce: int, curve=ecdsa.SECP256k1):
-    r = int(r, 16)
+def verify_nonce(r: int, nonce: int, curve=ecdsa.SECP256k1):
     assert (curve.generator * nonce).x() == r
 
 
 def derive_private_key_from_repeated_nonces(
-    r_str: str, s: list[str], h: list[str], curve: Curve
+    r: int, s: list[int], h: list[int], pubkey: str, curve: Curve
 ):
     if len(set(s)) != 2 or len(set(h)) != 2:
         raise ValueError(
             "Two distinct 's' and two distinct digest values are expected."
         )
     # Data
-    r = int(r_str, 16)
-    s1, s2 = int(s[0], base=16), int(s[1], base=16)
-    h1_str, h2_str = h[0], h[1]
-    h1, h2 = (
-        int(h1_str, base=16),
-        int(h2_str, base=16),
-    )
+    s1, s2 = s[0], s[1]
+    h1, h2 = h[0], h[1]
 
     # Typecasting & constants
     order = curve.order
@@ -74,14 +68,7 @@ def derive_private_key_from_repeated_nonces(
             vk = sk.get_verifying_key()
             try:
                 # Check the validity of the private key, as we might have recovered -k if the user has published -s1 and -s2 (which are still valid) over the network.
-                vk.verify_digest(
-                    bytes.fromhex(f"{r:064x}{s1:064x}"),
-                    bytes.fromhex(h1_str),
-                )
-                vk.verify_digest(
-                    bytes.fromhex(f"{r:064x}{s2:064x}"),
-                    bytes.fromhex(h2_str),
-                )
+                verify_private_key(pubkey, priv_key, curve=curve)
                 return {"nonce": nonce, "private_key": priv_key}
             except Exception as e:
                 raise e
