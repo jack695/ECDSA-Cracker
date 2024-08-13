@@ -5,7 +5,6 @@ import glob
 import os
 from keys_recovery.ecdsa_helper import is_signature_valid
 from ecdsa.curves import Curve
-import logging
 import networkx as nx
 from lib.script_parser.utxo_utils.encoding.address import (
     generate_flatten_utxo_addresses,
@@ -83,9 +82,6 @@ UncrackedCyclingSignaturesSchema = pa.DataFrameSchema(
 )
 
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
-
 SignatureFolder = namedtuple(
     "SignatureFolder", ["path", "check_signatures"], defaults=(False,)
 )
@@ -95,17 +91,25 @@ class SignatureDB:
 
     def __init__(self, signature_folders: list[SignatureFolder], curve: Curve):
         self.curve = curve
-        logger.info(
-            "Loading the signatures. This might take some time especially if the option to check the signatures is enabled."
-        )
         self._uncracked_keys_df = self._fetch_data(signature_folders)
-        self._cracked_keys_df = pd.DataFrame()
-        self._known_nonces_df = pd.DataFrame()
+        self._cracked_keys_df = pd.DataFrame(
+            columns=UncrackedCyclingSignaturesSchema.columns,
+            dtype=UncrackedCyclingSignaturesSchema.dtype,
+        )
+        self._known_nonces_df = pd.DataFrame(
+            columns=KnownNoncesSchema.columns, dtype=KnownNoncesSchema.dtype
+        ).set_index(keys="r")
 
         self._n_pubkeys = self._uncracked_keys_df["pubkey"].nunique()
         self._n_r = self._uncracked_keys_df["r"].nunique()
-        logger.info(f"{self._n_pubkeys} distinct private keys to recover.")
-        logger.info(f"{self._n_r} distinct nonces to recover.")
+
+    def get_stats(self):
+        return {
+            "pubkeys_cnt": self._n_pubkeys,
+            "r_cnt": self._n_r,
+            "cracked_keys_cnt": self._cracked_keys_df["pubkey"].nunique(),
+            "cracked_nonces_cnt": len(self._known_nonces_df),
+        }
 
     def find_repeated_nonces(self) -> pd.DataFrame:
         # Group by pubkey and r. Keep two records for every row.
@@ -138,22 +142,25 @@ class SignatureDB:
         KnownNoncesSchema.validate(nonces_df)
         nonces_df = nonces_df.set_index(keys="r")
 
+        if self._known_nonces_df.empty:
+            self._known_nonces_df = nonces_df.copy(deep=True)
+        else:
+            self._known_nonces_df = pd.concat([self._known_nonces_df, nonces_df])
+
         self._known_nonces_df = (
-            pd.concat([self._known_nonces_df, nonces_df])
-            .sort_values(by="vulnerable_timestamp")
+            self._known_nonces_df.sort_values(by="vulnerable_timestamp")
             .groupby(by="r", sort=False)
             .head(1)
-        )
-
-        logger.info(
-            f"{'Nonces':15s}: {len(self._known_nonces_df.index) / self._n_r * 100:.2f}% - {len(self._known_nonces_df.index)} over {self._n_r} nonces recovered."
         )
 
     def expand_cracked_keys(self, cracked_keys_df: pd.DataFrame):
         cracked_keys_df = cracked_keys_df[CrackedSignaturesSchema.columns.keys()]
         CrackedSignaturesSchema.validate(cracked_keys_df)
 
-        self._cracked_keys_df = pd.concat([self._cracked_keys_df, cracked_keys_df])
+        if self._cracked_keys_df.empty:
+            self._cracked_keys_df = cracked_keys_df.copy(deep=True)
+        else:
+            self._cracked_keys_df = pd.concat([self._cracked_keys_df, cracked_keys_df])
         self._uncracked_keys_df = (
             pd.merge(
                 self._uncracked_keys_df,
@@ -164,10 +171,6 @@ class SignatureDB:
             )
             .query('_merge=="left_only"')
             .drop("_merge", axis=1)
-        )
-
-        logger.info(
-            f"{'Private keys':15s}: {self._cracked_keys_df["pubkey"].nunique() / self._n_pubkeys * 100:.2f}% - {self._cracked_keys_df["pubkey"].nunique()} over {self._n_pubkeys} private keys recovered."
         )
 
     def get_crackable_keys_and_nonces(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -218,14 +221,11 @@ class SignatureDB:
         G = nx.Graph()
         G.add_edges_from(self._uncracked_keys_df[["pubkey", "r"]].to_numpy().tolist())
         cycles = nx.cycle_basis(G)
-        logger.info(
-            f"{len(cycles)} basis cycles have been found in the bi-partite graph of uncracked keys."
-        )
 
         indices_to_fetch = []
         for cycle_id, cycle in enumerate(cycles):
             for node, next_node in zip(cycle, cycle[1:] + [cycle[0]]):
-                # TODO: Check Panderas docs to access the type of "pubkey" from the schema.
+                # TODO: Check Panderas docs to access the type of "pubkey" from the schema instead of hardcoding "str".
                 pk, r = (node, next_node) if type(node) is str else (next_node, node)
                 indices_to_fetch.append((cycle_id, pk, r))
         indexes_to_fetch_df = pd.DataFrame(
@@ -235,7 +235,8 @@ class SignatureDB:
         cycle_rows = self._uncracked_keys_df.merge(
             indexes_to_fetch_df, how="inner", on=["r", "pubkey"]
         ).drop_duplicates()
-        UncrackedCyclingSignaturesSchema.validate(cycle_rows)
+        if len(cycle_rows.index) > 0:
+            UncrackedCyclingSignaturesSchema.validate(cycle_rows)
         return cycle_rows
 
     def save_addresses(self, out_file: str):

@@ -11,14 +11,23 @@ from keys_recovery.ecdsa_helper import (
 import logging
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(encoding="utf-8", level=logging.DEBUG)
+logging.basicConfig(
+    encoding="utf-8",
+    level=logging.DEBUG,
+    format="%(asctime)s: %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+)
 
 
 class ECDSABreaker:
     def __init__(
         self, signature_folders: list[SignatureFolder], curve: Curve, out_folder: str
     ) -> None:
+        logger.info(
+            "Loading the signatures... This might take some time especially if the option to check the signatures is enabled."
+        )
         self.db = SignatureDB(signature_folders, curve=curve)
+        self.log_stats()
         self.curve = curve
         self.out_folder = out_folder
 
@@ -41,7 +50,20 @@ class ECDSABreaker:
         )
         self.__crack_from_known_nonces_and_keys()
 
+        logger.info("-" * 25 + "RESULTS: " + "-" * 25)
+        self.log_stats()
         self.db.save_addresses(os.path.join(self.out_folder, "addresses.parquet"))
+
+    def log_stats(self, level=0):
+        stats = self.db.get_stats()
+        logger.info(
+            "   " * level
+            + f"{'Private keys':15s}: {stats['cracked_keys_cnt'] / stats['pubkeys_cnt'] * 100:.2f}% - {stats['cracked_keys_cnt']} over {stats['pubkeys_cnt']} private keys recovered."
+        )
+        logger.info(
+            "   " * level
+            + f"{'Nonces':15s}: {stats['cracked_nonces_cnt'] / stats['r_cnt'] * 100:.2f}% - {stats['cracked_nonces_cnt']} over {stats['r_cnt']} nonces recovered."
+        )
 
     def __crack_repeated_nonces(self):
         repeated_nonces_df = self.db.find_repeated_nonces()
@@ -61,30 +83,33 @@ class ECDSABreaker:
         crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()
 
         while len(crackable_keys.index) > 0 or len(crackable_nonces.index) > 0:
-            crackable_keys["privkey"] = crackable_keys.apply(
-                lambda row: derive_private_key_from_known_nonce(
-                    row["r"],
-                    row["s"],
-                    row["h"],
-                    row["nonce"],
-                    row["pubkey"],
-                    self.curve,
-                ),
-                axis=1,
-            )
-            self.db.expand_cracked_keys(crackable_keys)
+            if len(crackable_keys.index) > 0:
+                crackable_keys["privkey"] = crackable_keys.apply(
+                    lambda row: derive_private_key_from_known_nonce(
+                        row["r"],
+                        row["s"],
+                        row["h"],
+                        row["nonce"],
+                        row["pubkey"],
+                        self.curve,
+                    ),
+                    axis=1,
+                )
+                self.db.expand_cracked_keys(crackable_keys)
 
-            crackable_nonces["nonce"] = crackable_nonces.apply(
-                lambda row: derive_nonce_from_known_private_key(
-                    row["r"],
-                    row["s"],
-                    row["h"],
-                    row["privkey"],
-                ),
-                axis=1,
-            )
-            self.db.expand_known_nonce(crackable_nonces)
+            if len(crackable_nonces.index) > 0:
+                crackable_nonces["nonce"] = crackable_nonces.apply(
+                    lambda row: derive_nonce_from_known_private_key(
+                        row["r"],
+                        row["s"],
+                        row["h"],
+                        row["privkey"],
+                    ),
+                    axis=1,
+                )
+                self.db.expand_known_nonce(crackable_nonces)
 
+            self.log_stats(level=1)
             crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()
 
     def __crack_from_sig_equation_system(self):
@@ -111,6 +136,9 @@ class ECDSABreaker:
             return m, b
 
         cycle_signatures = self.db.get_cycle_signatures()
+        logger.info(
+            f"   {len(cycle_signatures)} basis cycles have been found in the bi-partite graph of uncracked keys.",
+        )
         cycle_signatures = cycle_signatures.set_index(keys="cycle_id")
 
         for id in sorted(cycle_signatures.index.unique()):
