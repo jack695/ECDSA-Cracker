@@ -73,9 +73,8 @@ class SignatureDB:
 
         return grouped_df.reset_index()
 
+    @check_input_format(KnownNoncesSchema, 1)
     def expand_known_nonce(self, nonces_df: pd.DataFrame):
-        nonces_df = nonces_df.reset_index()[KnownNoncesSchema.columns.keys()]
-        KnownNoncesSchema.validate(nonces_df)
         nonces_df = nonces_df.set_index(keys="r")
 
         if self._known_nonces_df.empty:
@@ -88,10 +87,8 @@ class SignatureDB:
                 .head(1)
             )
 
+    @check_input_format(CrackedSignaturesSchema, 1)
     def expand_cracked_keys(self, cracked_keys_df: pd.DataFrame):
-        cracked_keys_df = cracked_keys_df[CrackedSignaturesSchema.columns.keys()]
-        CrackedSignaturesSchema.validate(cracked_keys_df)
-
         if self._cracked_keys_df.empty:
             self._cracked_keys_df = cracked_keys_df.copy(deep=True)
         else:

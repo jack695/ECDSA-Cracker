@@ -81,3 +81,18 @@ def check_output_format(schema):
         return wrapper
 
     return decorator
+
+
+def check_input_format(schema, nth_arg):
+    def decorator(function):
+        def wrapper(*args, **kwargs):
+            df = args[nth_arg]
+            if len(df.index) > 0:
+                df = df[schema.columns.keys()]
+                schema.validate(df)
+            function(*args[:nth_arg], df, *args[nth_arg + 1 :], **kwargs)
+            return df
+
+        return wrapper
+
+    return decorator
