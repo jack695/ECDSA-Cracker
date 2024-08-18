@@ -7,7 +7,7 @@ from keys_recovery.ecdsa_helper import is_signature_valid
 from ecdsa.curves import Curve
 import networkx as nx
 from lib.script_parser.utxo_utils.encoding.address import (
-    generate_flatten_utxo_addresses,
+    generate_flatten_addresses,
 )
 import pandera as pa
 from pandera.typing import DataFrame
@@ -246,7 +246,7 @@ class SignatureDB:
         all_private_keys_with_addresses[
             ["chain_address", "pubkey_format", "address"]
         ] = all_private_keys_with_addresses.apply(
-            lambda row: generate_flatten_utxo_addresses(row["pubkey"]),
+            lambda row: generate_flatten_addresses(row["pubkey"]),
             axis=1,
             result_type="expand",
         )
