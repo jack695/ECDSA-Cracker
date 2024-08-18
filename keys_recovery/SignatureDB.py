@@ -241,7 +241,12 @@ class SignatureDB:
 
     def save_addresses(self, out_file: str):
         all_private_keys_with_addresses = (
-            self._cracked_keys_df[["pubkey"]].drop_duplicates().reset_index()
+            self._cracked_keys_df[["pubkey", "vulnerable_timestamp"]]
+            .sort_values(["vulnerable_timestamp"])
+            .groupby(by=["pubkey"], sort=False)
+            .head(1)
+            .drop_duplicates()
+            .reset_index()
         )
         all_private_keys_with_addresses[
             ["chain_address", "pubkey_format", "address"]
@@ -253,9 +258,7 @@ class SignatureDB:
         all_private_keys_with_addresses = all_private_keys_with_addresses.explode(
             ["chain_address", "pubkey_format", "address"]
         )
-        all_private_keys_with_addresses[
-            ["address", "chain_address", "pubkey", "pubkey_format"]
-        ].to_parquet(out_file)
+        all_private_keys_with_addresses.to_parquet(out_file)
 
     def _fetch_data(self, signature_folders: list[SignatureFolder]) -> pd.DataFrame:
         chunks = []
