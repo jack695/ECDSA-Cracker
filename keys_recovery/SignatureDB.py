@@ -9,70 +9,15 @@ import networkx as nx
 from lib.script_parser.utxo_utils.encoding.address import (
     generate_flatten_addresses,
 )
-import pandera as pa
-
-
-UncrackedSignaturesSchema = pa.DataFrameSchema(
-    {
-        "block_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "r": pa.Column(object),
-        "s": pa.Column(object),
-        "h": pa.Column(object),
-        "pubkey": pa.Column(str),
-    }
+from keys_recovery.dataframe_schemas import (
+    CrackedSignaturesSchema,
+    CrackableSignaturesSchema,
+    CrackableNoncesSchema,
+    KnownNoncesSchema,
+    UncrackedCyclingSignaturesSchema,
+    UncrackedSignaturesSchema,
+    check_output_format,
 )
-
-CrackedSignaturesSchema = pa.DataFrameSchema(
-    {
-        "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "r": pa.Column(object),
-        "pubkey": pa.Column(str),
-        "privkey": pa.Column(object),
-        "vulnerability_source": pa.Column(str),
-    }
-)
-
-KnownNoncesSchema = pa.DataFrameSchema(
-    {
-        "r": pa.Column(object),
-        "nonce": pa.Column(object),
-        "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-    }
-)
-
-CrackableSignaturesSchema = pa.DataFrameSchema(
-    {
-        "r": pa.Column(object),
-        "s": pa.Column(object),
-        "h": pa.Column(object),
-        "pubkey": pa.Column(str),
-        "nonce": pa.Column(object),
-        "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-    }
-)
-
-CrackableNoncesSchema = pa.DataFrameSchema(
-    {
-        "r": pa.Column(object),
-        "s": pa.Column(object),
-        "h": pa.Column(object),
-        "pubkey": pa.Column(str),
-        "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "privkey": pa.Column(object),
-    }
-)
-
-UncrackedCyclingSignaturesSchema = pa.DataFrameSchema(
-    {
-        "block_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "r": pa.Column(object),
-        "s": pa.Column(object),
-        "h": pa.Column(object),
-        "pubkey": pa.Column(str),
-        "cycle_id": pa.Column("int64"),
-    }
-)
-
 
 SignatureFolder = namedtuple(
     "SignatureFolder", ["path", "check_signatures"], defaults=(False,)
@@ -216,6 +161,7 @@ class SignatureDB:
 
         return crackable_keys, crackable_nonces
 
+    @check_output_format(UncrackedCyclingSignaturesSchema)
     def get_cycle_signatures(self) -> pd.DataFrame:
         """Return a list of dataframes, each of them represents a cycle among the bi-partite graph of uncracked keys and uncracked 'r' values.
 
@@ -246,8 +192,6 @@ class SignatureDB:
             .head(1)
         )
 
-        if len(cycle_rows.index) > 0:
-            UncrackedCyclingSignaturesSchema.validate(cycle_rows)
         return cycle_rows
 
     def save_addresses(self, out_file: str):
@@ -271,6 +215,7 @@ class SignatureDB:
         )
         all_private_keys_with_addresses.to_parquet(out_file)
 
+    @check_output_format(UncrackedSignaturesSchema)
     def _fetch_data(self, signature_folders: list[SignatureFolder]) -> pd.DataFrame:
         chunks = []
         for folder in signature_folders:
@@ -313,14 +258,4 @@ class SignatureDB:
             axis=1,
         )
 
-        sig_df = sig_df.drop(
-            columns=[
-                "chain",
-                "message digest",
-                "transaction_hash",
-                "input_index",
-            ]
-        )
-
-        UncrackedSignaturesSchema.validate(sig_df)
         return sig_df
