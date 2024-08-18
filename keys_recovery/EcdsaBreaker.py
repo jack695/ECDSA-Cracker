@@ -34,6 +34,7 @@ class ECDSABreaker:
     def crack(self):
         logger.info("ROUND 0: Derive nonces and private keys from repeated nonces")
         self.__crack_repeated_nonces()
+        self.log_stats(level=1)
 
         logger.info(
             "ROUND 1: Derive nonces from known private keys and private keys from known nonces"
@@ -44,6 +45,7 @@ class ECDSABreaker:
             "ROUND 2: Derive nonces and private keys from signatures that form a system of linear equations."
         )
         self.__crack_from_sig_equation_system()
+        self.log_stats(level=1)
 
         logger.info(
             "ROUND 3: Derive nonces from known private keys and private keys from known nonces"
@@ -137,7 +139,7 @@ class ECDSABreaker:
 
         cycle_signatures = self.db.get_cycle_signatures()
         logger.info(
-            f"   {cycle_signatures["cycle_id"].nunique()} basis cycles have been found in the bi-partite graph of uncracked keys.",
+            f"   {cycle_signatures["cycle_id"].nunique()} basis cycles have been found in the bi-partite graph formed by the public keys and 'r' values.",
         )
         cycle_signatures = cycle_signatures.set_index(keys="cycle_id")
 
