@@ -152,17 +152,9 @@ class SignatureDB:
             self._cracked_keys_df = cracked_keys_df.copy(deep=True)
         else:
             self._cracked_keys_df = pd.concat([self._cracked_keys_df, cracked_keys_df])
-        self._uncracked_keys_df = (
-            pd.merge(
-                self._uncracked_keys_df,
-                cracked_keys_df[["pubkey", "r"]],
-                indicator=True,
-                how="outer",
-                on=["pubkey", "r"],
-            )
-            .query('_merge=="left_only"')
-            .drop("_merge", axis=1)
-        )
+            self._cracked_keys_df.sort_values(by="vulnerable_timestamp").groupby(
+                by="pubkey", sort=False
+            ).head(1)
 
     def get_crackable_keys_and_nonces(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Return 2 dataframes
@@ -175,6 +167,20 @@ class SignatureDB:
             on="r",
             how="inner",
         )
+        crackable_keys = (
+            pd.merge(
+                crackable_keys,
+                self._cracked_keys_df[["pubkey", "r", "vulnerable_timestamp"]],
+                indicator=True,
+                how="outer",
+                on=["pubkey", "r"],
+                suffixes=(None, "_cracked_keys"),
+            )
+            .query(
+                '_merge=="left_only" | vulnerable_timestamp < vulnerable_timestamp_cracked_keys'
+            )  # Get keys that are not cracked yet or that would allow to crack the key earlier
+            .drop(columns=["_merge", "vulnerable_timestamp_cracked_keys"], axis=1)
+        )
         crackable_keys["vulnerable_timestamp"] = crackable_keys[
             ["block_timestamp", "vulnerable_timestamp"]
         ].max(axis=1)
@@ -185,6 +191,20 @@ class SignatureDB:
             self._cracked_keys_df[["pubkey", "vulnerable_timestamp", "privkey"]],
             how="inner",
             on="pubkey",
+        )
+        crackable_nonces = (
+            pd.merge(
+                crackable_nonces,
+                self._known_nonces_df.reset_index()[["r", "vulnerable_timestamp"]],
+                indicator=True,
+                how="outer",
+                on=["r"],
+                suffixes=(None, "_known_nonces"),
+            )
+            .query(
+                '_merge=="left_only" | vulnerable_timestamp < vulnerable_timestamp_known_nonces'
+            )  # Get nonces that are not yet known or that would allow to know the nonce earlier
+            .drop(columns=["_merge", "vulnerable_timestamp_known_nonces"], axis=1)
         )
         crackable_nonces["vulnerable_timestamp"] = crackable_nonces[
             ["block_timestamp", "vulnerable_timestamp"]
@@ -217,9 +237,15 @@ class SignatureDB:
             indices_to_fetch, columns=["cycle_id", "pubkey", "r"]
         )
 
-        cycle_rows = self._uncracked_keys_df.merge(
-            indexes_to_fetch_df, how="inner", on=["r", "pubkey"]
-        ).drop_duplicates()
+        cycle_rows = (
+            self._uncracked_keys_df.merge(
+                indexes_to_fetch_df, how="inner", on=["r", "pubkey"]
+            )
+            .sort_values(by="block_timestamp")
+            .groupby(by=["r", "pubkey", "cycle_id"])
+            .head(1)
+        )
+
         if len(cycle_rows.index) > 0:
             UncrackedCyclingSignaturesSchema.validate(cycle_rows)
         return cycle_rows

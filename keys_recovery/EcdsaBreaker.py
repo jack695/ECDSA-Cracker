@@ -137,7 +137,7 @@ class ECDSABreaker:
 
         cycle_signatures = self.db.get_cycle_signatures()
         logger.info(
-            f"   {len(cycle_signatures)} basis cycles have been found in the bi-partite graph of uncracked keys.",
+            f"   {cycle_signatures["cycle_id"].nunique()} basis cycles have been found in the bi-partite graph of uncracked keys.",
         )
         cycle_signatures = cycle_signatures.set_index(keys="cycle_id")
 
