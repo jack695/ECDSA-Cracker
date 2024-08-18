@@ -113,7 +113,8 @@ class ECDSABreaker:
                 self.db.expand_known_nonce(crackable_nonces)
 
             self.log_stats(level=1)
-            crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()
+            crackable_keys = self.db.get_crackable_keys()
+            crackable_nonces = self.db.get_crackable_nonces()
 
     def __crack_from_sig_equation_system(self):
         def build_system_matrix(rows, pubkeys: list[str], r: list[int]):

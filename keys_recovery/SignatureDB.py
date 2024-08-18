@@ -99,8 +99,7 @@ class SignatureDB:
 
     @check_output_format(CrackableSignaturesSchema)
     def get_crackable_keys(self) -> pd.DataFrame:
-        """Return the uncracked keys that could be recovered as they used known nonces.
-        """
+        """Return the uncracked keys that could be recovered as they used known nonces."""
         crackable_keys = pd.merge(
             self._uncracked_keys_df,
             self._known_nonces_df,
@@ -136,9 +135,8 @@ class SignatureDB:
         return crackable_keys
 
     @check_output_format(CrackableNoncesSchema)
-    def get_crackable_nonces(self) -> pd.DataFrame, pd.DataFrame:
-        """Return the nonces that could be recovered thereafter as they were used by those private keys.
-        """
+    def get_crackable_nonces(self) -> pd.DataFrame:
+        """Return the nonces that could be recovered thereafter as they were used by those private keys."""
         crackable_nonces = pd.merge(
             self._uncracked_keys_df,
             self._cracked_keys_df[["pubkey", "vulnerable_timestamp", "privkey"]],
