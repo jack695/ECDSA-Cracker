@@ -93,8 +93,8 @@ class SignatureDB:
         self.curve = curve
         self._uncracked_keys_df = self._fetch_data(signature_folders)
         self._cracked_keys_df = pd.DataFrame(
-            columns=UncrackedCyclingSignaturesSchema.columns,
-            dtype=UncrackedCyclingSignaturesSchema.dtype,
+            columns=CrackedSignaturesSchema.columns,
+            dtype=CrackedSignaturesSchema.dtype,
         )
         self._known_nonces_df = pd.DataFrame(
             columns=KnownNoncesSchema.columns, dtype=KnownNoncesSchema.dtype
