@@ -1,5 +1,5 @@
 from collections import namedtuple
-from typing import Annotated, Tuple
+from typing import Tuple
 import pandas as pd
 import glob
 import os
@@ -10,12 +10,10 @@ from lib.script_parser.utxo_utils.encoding.address import (
     generate_flatten_addresses,
 )
 import pandera as pa
-from pandera.typing import DataFrame
 
 
 UncrackedSignaturesSchema = pa.DataFrameSchema(
     {
-        "chain": pa.Column(str),
         "block_timestamp": pa.Column("datetime64[ms, UTC]"),
         "r": pa.Column(object),
         "s": pa.Column(object),
@@ -26,12 +24,11 @@ UncrackedSignaturesSchema = pa.DataFrameSchema(
 
 CrackedSignaturesSchema = pa.DataFrameSchema(
     {
-        "chain": pa.Column(str),
         "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
         "r": pa.Column(object),
         "pubkey": pa.Column(str),
         "privkey": pa.Column(object),
-        "r_chain": pa.Column(str),
+        "vulnerability_source": pa.Column(str),
     }
 )
 
@@ -39,20 +36,17 @@ KnownNoncesSchema = pa.DataFrameSchema(
     {
         "r": pa.Column(object),
         "nonce": pa.Column(object),
-        "r_chain": pa.Column(str),
         "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
     }
 )
 
 CrackableSignaturesSchema = pa.DataFrameSchema(
     {
-        "chain": pa.Column(str),
         "r": pa.Column(object),
         "s": pa.Column(object),
         "h": pa.Column(object),
         "pubkey": pa.Column(str),
         "nonce": pa.Column(object),
-        "r_chain": pa.Column(str),
         "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
     }
 )
@@ -65,13 +59,11 @@ CrackableNoncesSchema = pa.DataFrameSchema(
         "pubkey": pa.Column(str),
         "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
         "privkey": pa.Column(object),
-        "r_chain": pa.Column(str),
     }
 )
 
 UncrackedCyclingSignaturesSchema = pa.DataFrameSchema(
     {
-        "chain": pa.Column(str),
         "block_timestamp": pa.Column("datetime64[ms, UTC]"),
         "r": pa.Column(object),
         "s": pa.Column(object),
@@ -123,7 +115,6 @@ class SignatureDB:
                 digest_cnt=("h", "nunique"),
                 s=("s", lambda s: s.drop_duplicates().head(2)),
                 digests=("h", lambda s: s.drop_duplicates().head(2)),
-                chain=("chain", lambda s: s.drop_duplicates()),
                 vulnerable_timestamp=(
                     "block_timestamp",
                     lambda s: s.head(2).tail(1),
@@ -189,17 +180,11 @@ class SignatureDB:
         ].max(axis=1)
         crackable_keys = crackable_keys.drop(columns=["block_timestamp"])
 
-        crackable_nonces = (
-            pd.merge(
-                self._uncracked_keys_df,
-                self._cracked_keys_df[
-                    ["pubkey", "vulnerable_timestamp", "privkey", "r_chain"]
-                ],
-                how="inner",
-                on="pubkey",
-            )
-            .drop(columns="r_chain")
-            .rename(columns={"chain": "r_chain"})
+        crackable_nonces = pd.merge(
+            self._uncracked_keys_df,
+            self._cracked_keys_df[["pubkey", "vulnerable_timestamp", "privkey"]],
+            how="inner",
+            on="pubkey",
         )
         crackable_nonces["vulnerable_timestamp"] = crackable_nonces[
             ["block_timestamp", "vulnerable_timestamp"]
@@ -291,8 +276,24 @@ class SignatureDB:
         sig_df["r"] = sig_df["r"].apply(lambda r: int(r, 16))
         sig_df["s"] = sig_df["s"].apply(lambda r: int(r, 16))
         sig_df["h"] = sig_df["message digest"].apply(lambda r: int(r, 16))
+        sig_df["blockchain_source_id"] = sig_df.apply(
+            lambda row: (
+                row["chain"]
+                + ":"
+                + row["transaction_hash"]
+                + ":"
+                + str(row["input_index"])
+            ),
+            axis=1,
+        )
+
         sig_df = sig_df.drop(
-            columns=["message digest", "transaction_hash", "input_index"]
+            columns=[
+                "chain",
+                "message digest",
+                "transaction_hash",
+                "input_index",
+            ]
         )
 
         UncrackedSignaturesSchema.validate(sig_df)
