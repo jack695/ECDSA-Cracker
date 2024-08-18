@@ -82,12 +82,11 @@ class SignatureDB:
             self._known_nonces_df = nonces_df.copy(deep=True)
         else:
             self._known_nonces_df = pd.concat([self._known_nonces_df, nonces_df])
-
-        self._known_nonces_df = (
-            self._known_nonces_df.sort_values(by="vulnerable_timestamp")
-            .groupby(by="r", sort=False)
-            .head(1)
-        )
+            self._known_nonces_df = (
+                self._known_nonces_df.sort_values(by="vulnerable_timestamp")
+                .groupby(by="r", sort=False)
+                .head(1)
+            )
 
     def expand_cracked_keys(self, cracked_keys_df: pd.DataFrame):
         cracked_keys_df = cracked_keys_df[CrackedSignaturesSchema.columns.keys()]
