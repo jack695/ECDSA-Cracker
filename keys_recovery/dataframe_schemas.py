@@ -14,7 +14,6 @@ UncrackedSignaturesSchema = pa.DataFrameSchema(
 CrackedSignaturesSchema = pa.DataFrameSchema(
     {
         "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "r": pa.Column(object),
         "pubkey": pa.Column(str),
         "privkey": pa.Column(object),
         "vulnerability_source": pa.Column(str),
