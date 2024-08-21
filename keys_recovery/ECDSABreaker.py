@@ -80,21 +80,21 @@ class ECDSABreaker:
         self.db.expand_cracked_keys(repeated_nonces_df)
 
     def __crack_from_known_nonces_and_keys(self):
-        uncracked_keys_df = self.db._uncracked_keys_df
+        uncracked_keys_df = self.db.uncracked_keys_df
         uncracked_keys_df = (
             uncracked_keys_df.sort_values(by="block_timestamp")
             .groupby(by=["r", "pubkey"], sort=False)
             .head(1)
         )
 
-        cracked_keys_df = self.db._cracked_keys_df
+        cracked_keys_df = self.db.cracked_keys_df
         cracked_keys_df = (
             cracked_keys_df.sort_values(by="vulnerable_timestamp")
             .groupby(by=["pubkey"], sort=False)
             .head(1)
         )
 
-        known_nonces_df = self.db._known_nonces_df.reset_index()
+        known_nonces_df = self.db.known_nonces_df.reset_index()
 
         propagater = Propagater(uncracked_keys_df, cracked_keys_df, known_nonces_df)
         propagater.propagate()

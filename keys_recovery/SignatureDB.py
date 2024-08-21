@@ -35,13 +35,13 @@ class SignatureDB:
         )
         self._known_nonces_df = pd.DataFrame(
             columns=KnownNoncesSchema.columns, dtype=KnownNoncesSchema.dtype
-        ).set_index(keys="r")
+        )
 
         self._n_pubkeys = self._uncracked_keys_df["pubkey"].nunique()
         self._n_r = self._uncracked_keys_df["r"].nunique()
 
     @property
-    @check_output_format(UncrackedCyclingSignaturesSchema)
+    @check_output_format(UncrackedSignaturesSchema)
     def uncracked_keys_df(self):
         return self._uncracked_keys_df
 
@@ -91,8 +91,6 @@ class SignatureDB:
 
     @check_input_format(KnownNoncesSchema, 1)
     def expand_known_nonce(self, nonces_df: pd.DataFrame):
-        nonces_df = nonces_df.set_index(keys="r")
-
         if self._known_nonces_df.empty:
             self._known_nonces_df = nonces_df.copy(deep=True)
         else:
@@ -153,13 +151,8 @@ class SignatureDB:
         return cycle_rows
 
     def build_lineage(self, pubkey: str):
-        cracked_keys_df = (
-            self._cracked_keys_df.sort_values(by="vulnerable_timestamp")
-            .groupby(by="pubkey", sort=False)
-            .head(1)
-        )
-        cracked_keys_df = cracked_keys_df.set_index("pubkey")
-        known_nonces_df = self._known_nonces_df
+        cracked_keys_df = self._cracked_keys_df.set_index("pubkey")
+        known_nonces_df = self._known_nonces_df.set_index("r")
 
         lineage = []
         r_side = False
