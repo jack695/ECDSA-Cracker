@@ -1,4 +1,5 @@
 from collections import namedtuple
+from pydoc import locate
 from typing import Tuple
 import pandas as pd
 import glob
@@ -11,8 +12,6 @@ from lib.script_parser.utxo_utils.encoding.address import (
 )
 from keys_recovery.dataframe_schemas import (
     CrackedSignaturesSchema,
-    CrackableSignaturesSchema,
-    CrackableNoncesSchema,
     KnownNoncesSchema,
     UncrackedCyclingSignaturesSchema,
     UncrackedSignaturesSchema,
@@ -40,6 +39,21 @@ class SignatureDB:
 
         self._n_pubkeys = self._uncracked_keys_df["pubkey"].nunique()
         self._n_r = self._uncracked_keys_df["r"].nunique()
+
+    @property
+    @check_output_format(UncrackedCyclingSignaturesSchema)
+    def uncracked_keys_df(self):
+        return self._uncracked_keys_df
+
+    @property
+    @check_output_format(CrackedSignaturesSchema)
+    def cracked_keys_df(self):
+        return self._cracked_keys_df
+
+    @property
+    @check_output_format(KnownNoncesSchema)
+    def known_nonces_df(self):
+        return self._known_nonces_df
 
     def get_stats(self):
         return {
@@ -101,59 +115,6 @@ class SignatureDB:
                 .head(1)
             )
 
-        crackable_keys = (
-            pd.merge(
-                crackable_keys,
-                self._cracked_keys_df[["pubkey", "r", "vulnerable_timestamp"]],
-                indicator=True,
-                how="outer",
-                on=["pubkey", "r"],
-                suffixes=(None, "_cracked_keys"),
-            )
-            .query(
-                '_merge=="left_only" | vulnerable_timestamp < vulnerable_timestamp_cracked_keys'
-            )  # Get keys that are not cracked yet or that would allow to crack the key earlier
-            .drop(columns=["_merge", "vulnerable_timestamp_cracked_keys"], axis=1)
-        )
-
-        return crackable_keys
-
-    @check_output_format(CrackableNoncesSchema)
-    def get_crackable_nonces(self) -> pd.DataFrame:
-        """Return the nonces that could be recovered thereafter as they were used by those private keys."""
-        crackable_nonces = pd.merge(
-            self._uncracked_keys_df,
-            self._cracked_keys_df[["pubkey", "vulnerable_timestamp", "privkey"]],
-            how="inner",
-            on="pubkey",
-        )
-        crackable_nonces["vulnerable_timestamp"] = crackable_nonces[
-            ["block_timestamp", "vulnerable_timestamp"]
-        ].max(axis=1)
-        crackable_nonces = crackable_nonces.drop(columns=["block_timestamp"])
-
-        crackable_nonces = (
-            crackable_nonces.sort_values(by="vulnerable_timestamp")
-            .groupby(by=["r", "pubkey"], sort=False)
-            .head(1)
-        )
-        crackable_nonces = (
-            pd.merge(
-                crackable_nonces,
-                self._known_nonces_df.reset_index()[["r", "vulnerable_timestamp"]],
-                indicator=True,
-                how="outer",
-                on=["r"],
-                suffixes=(None, "_known_nonces"),
-            )
-            .query(
-                '_merge=="left_only" | vulnerable_timestamp < vulnerable_timestamp_known_nonces'
-            )  # Get nonces that are not yet known or that would allow to know the nonce earlier
-            .drop(columns=["_merge", "vulnerable_timestamp_known_nonces"], axis=1)
-        )
-
-        return crackable_nonces
-
     @check_output_format(UncrackedCyclingSignaturesSchema)
     def get_cycle_signatures(self) -> pd.DataFrame:
         """Return a list of dataframes, each of them represents a cycle among the bi-partite graph of uncracked keys and uncracked 'r' values.
@@ -169,8 +130,12 @@ class SignatureDB:
         indices_to_fetch = []
         for cycle_id, cycle in enumerate(cycles):
             for node, next_node in zip(cycle, cycle[1:] + [cycle[0]]):
-                # TODO: Check Panderas docs to access the type of "pubkey" from the schema instead of hardcoding "str".
-                pk, r = (node, next_node) if type(node) is str else (next_node, node)
+                pk, r = (
+                    (node, next_node)
+                    if type(node)
+                    is locate(str(UncrackedCyclingSignaturesSchema.dtypes["pubkey"]))
+                    else (next_node, node)
+                )
                 indices_to_fetch.append((cycle_id, pk, r))
         indexes_to_fetch_df = pd.DataFrame(
             indices_to_fetch, columns=["cycle_id", "pubkey", "r"]

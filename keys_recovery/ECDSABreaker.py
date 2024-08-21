@@ -10,6 +10,8 @@ from keys_recovery.ecdsa_helper import (
 )
 import logging
 
+from keys_recovery.graph_utils.Propagater import Propagater
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     encoding="utf-8",
@@ -42,11 +44,10 @@ class ECDSABreaker:
         self.__crack_from_sig_equation_system()
         self.log_stats(level=1)
 
-        # NOTE: Temporarily disabled before the implementation of the new method
-        """logger.info(
+        logger.info(
             "ROUND 2: Derive nonces from known private keys and private keys from known nonces"
         )
-        self.__crack_from_known_nonces_and_keys()"""
+        self.__crack_from_known_nonces_and_keys()
 
         logger.info("-" * 25 + "RESULTS: " + "-" * 25)
         self.log_stats()
@@ -78,40 +79,30 @@ class ECDSABreaker:
         self.db.expand_cracked_keys(repeated_nonces_df)
 
     def __crack_from_known_nonces_and_keys(self):
-        crackable_keys = self.db.get_crackable_keys()
-        crackable_nonces = self.db.get_crackable_nonces()
+        uncracked_keys_df = self.db._uncracked_keys_df
+        uncracked_keys_df = (
+            uncracked_keys_df.sort_values(by="block_timestamp")
+            .groupby(by=["r", "pubkey"], sort=False)
+            .head(1)
+        )
 
-        while len(crackable_keys.index) > 0 or len(crackable_nonces.index) > 0:
-            if len(crackable_keys.index) > 0:
-                crackable_keys["privkey"] = crackable_keys.apply(
-                    lambda row: derive_private_key_from_known_nonce(
-                        row["r"],
-                        row["s"],
-                        row["h"],
-                        row["nonce"],
-                        row["pubkey"],
-                        self.curve,
-                    ),
-                    axis=1,
-                )
-                crackable_keys["vulnerability_source"] = "known_nonces"
-                self.db.expand_cracked_keys(crackable_keys)
+        cracked_keys_df = self.db._cracked_keys_df
+        cracked_keys_df = (
+            cracked_keys_df.sort_values(by="vulnerable_timestamp")
+            .groupby(by=["pubkey"], sort=False)
+            .head(1)
+        )
 
-            if len(crackable_nonces.index) > 0:
-                crackable_nonces["nonce"] = crackable_nonces.apply(
-                    lambda row: derive_nonce_from_known_private_key(
-                        row["r"],
-                        row["s"],
-                        row["h"],
-                        row["privkey"],
-                    ),
-                    axis=1,
-                )
-                self.db.expand_known_nonce(crackable_nonces)
+        known_nonces_df = self.db._known_nonces_df.reset_index()
 
-            self.log_stats(level=1)
-            crackable_keys = self.db.get_crackable_keys()
-            crackable_nonces = self.db.get_crackable_nonces()
+        propagater = Propagater(uncracked_keys_df, cracked_keys_df, known_nonces_df)
+        propagater.propagate()
+
+        cracked_keys_df = propagater.build_cracked_keys_df()
+        self.db.expand_cracked_keys(cracked_keys_df)
+
+        cracked_nonces_df = propagater.build_known_nonces_df()
+        self.db.expand_known_nonce(cracked_nonces_df)
 
     def __crack_from_sig_equation_system(self):
         def build_system_matrix(rows, pubkeys: list[str], r: list[int]):

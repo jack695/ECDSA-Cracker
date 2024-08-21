@@ -6,11 +6,11 @@ UNCRACKED_COMMON_COLUMNS = {
     "h": pa.Column(object),
     "pubkey": pa.Column(str),
     "sig_id": pa.Column(str),
-    "block_timestamp": pa.Column("datetime64[ms, UTC]"),
+    "block_timestamp": pa.Column("datetime64[ms, UTC]", coerce=True),
 }
 
 CRACKED_COMMON_COLUMNS = {
-    "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
+    "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]", coerce=True),
     "vulnerability_source": pa.Column(str),
     "lineage": pa.Column(list),
 }
@@ -23,22 +23,6 @@ CrackedSignaturesSchema = pa.DataFrameSchema(
 
 KnownNoncesSchema = pa.DataFrameSchema(
     {"r": pa.Column(object), "nonce": pa.Column(object), **CRACKED_COMMON_COLUMNS}
-)
-
-CrackableSignaturesSchema = pa.DataFrameSchema(
-    {
-        "nonce": pa.Column(object),
-        "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-        **UNCRACKED_COMMON_COLUMNS,
-    }
-)
-
-CrackableNoncesSchema = pa.DataFrameSchema(
-    {
-        "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "privkey": pa.Column(object),
-        **UNCRACKED_COMMON_COLUMNS,
-    }
 )
 
 UncrackedCyclingSignaturesSchema = pa.DataFrameSchema(
