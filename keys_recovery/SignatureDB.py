@@ -152,6 +152,45 @@ class SignatureDB:
 
         return cycle_rows
 
+    def build_lineage(self, pubkey: str):
+        cracked_keys_df = (
+            self._cracked_keys_df.sort_values(by="vulnerable_timestamp")
+            .groupby(by="pubkey", sort=False)
+            .head(1)
+        )
+        cracked_keys_df = cracked_keys_df.set_index("pubkey")
+        known_nonces_df = self._known_nonces_df
+
+        lineage = []
+        r_side = False
+        key, df = pubkey, cracked_keys_df
+        vulnerability_source = df.loc[key].vulnerability_source
+
+        while key:
+            lineage.append(
+                (
+                    key,
+                    vulnerability_source,
+                    df.loc[key].lineage,
+                    df.loc[key].vulnerable_timestamp,
+                )
+            )
+
+            # Next iteration
+            if vulnerability_source in ["repeated_nonces", "equation_system"]:
+                key = None
+            else:
+                if r_side:
+                    key = vulnerability_source.split(":")[1]
+                    df = cracked_keys_df
+                else:
+                    key = int(vulnerability_source.split(":")[1])
+                    df = known_nonces_df
+                r_side = not r_side
+                vulnerability_source = df.loc[key].vulnerability_source
+
+        return lineage
+
     def save_addresses(self, out_file: str):
         all_private_keys_with_addresses = (
             self._cracked_keys_df[["pubkey", "vulnerable_timestamp"]]

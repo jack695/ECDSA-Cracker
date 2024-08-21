@@ -48,6 +48,7 @@ class ECDSABreaker:
             "ROUND 2: Derive nonces from known private keys and private keys from known nonces"
         )
         self.__crack_from_known_nonces_and_keys()
+        self.log_stats(level=1)
 
         logger.info("-" * 25 + "RESULTS: " + "-" * 25)
         self.log_stats()
