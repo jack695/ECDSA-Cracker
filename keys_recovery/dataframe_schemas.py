@@ -1,69 +1,50 @@
 import pandera as pa
 
-UncrackedSignaturesSchema = pa.DataFrameSchema(
-    {
-        "block_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "r": pa.Column(object),
-        "s": pa.Column(object),
-        "h": pa.Column(object),
-        "pubkey": pa.Column(str),
-        "sig_id": pa.Column(str),
-    }
-)
+UNCRACKED_COMMON_COLUMNS = {
+    "r": pa.Column(object),
+    "s": pa.Column(object),
+    "h": pa.Column(object),
+    "pubkey": pa.Column(str),
+    "sig_id": pa.Column(str),
+    "block_timestamp": pa.Column("datetime64[ms, UTC]"),
+}
+
+CRACKED_COMMON_COLUMNS = {
+    "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
+    "vulnerability_source": pa.Column(str),
+    "lineage": pa.Column(list),
+}
+
+UncrackedSignaturesSchema = pa.DataFrameSchema({**UNCRACKED_COMMON_COLUMNS})
 
 CrackedSignaturesSchema = pa.DataFrameSchema(
-    {
-        "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "pubkey": pa.Column(str),
-        "privkey": pa.Column(object),
-        "vulnerability_source": pa.Column(str),
-        "lineage": pa.Column(list),
-    }
+    {"pubkey": pa.Column(str), "privkey": pa.Column(object), **CRACKED_COMMON_COLUMNS}
 )
 
 KnownNoncesSchema = pa.DataFrameSchema(
-    {
-        "r": pa.Column(object),
-        "nonce": pa.Column(object),
-        "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "vulnerability_source": pa.Column(str),
-        "lineage": pa.Column(list),
-    }
+    {"r": pa.Column(object), "nonce": pa.Column(object), **CRACKED_COMMON_COLUMNS}
 )
 
 CrackableSignaturesSchema = pa.DataFrameSchema(
     {
-        "r": pa.Column(object),
-        "s": pa.Column(object),
-        "h": pa.Column(object),
-        "pubkey": pa.Column(str),
         "nonce": pa.Column(object),
         "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "sig_id": pa.Column(str),
+        **UNCRACKED_COMMON_COLUMNS,
     }
 )
 
 CrackableNoncesSchema = pa.DataFrameSchema(
     {
-        "r": pa.Column(object),
-        "s": pa.Column(object),
-        "h": pa.Column(object),
-        "pubkey": pa.Column(str),
         "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
         "privkey": pa.Column(object),
-        "sig_id": pa.Column(str),
+        **UNCRACKED_COMMON_COLUMNS,
     }
 )
 
 UncrackedCyclingSignaturesSchema = pa.DataFrameSchema(
     {
-        "block_timestamp": pa.Column("datetime64[ms, UTC]"),
-        "r": pa.Column(object),
-        "s": pa.Column(object),
-        "h": pa.Column(object),
-        "pubkey": pa.Column(str),
         "cycle_id": pa.Column("int64"),
-        "sig_id": pa.Column(str),
+        **UNCRACKED_COMMON_COLUMNS,
     }
 )
 
