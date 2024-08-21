@@ -76,12 +76,13 @@ class ECDSABreaker:
             axis=1,
             result_type="expand",
         )
+        self.db.expand_known_nonce(repeated_nonces_df)
         repeated_nonces_df["vulnerability_source"] = "repeated_nonces"
         self.db.expand_cracked_keys(repeated_nonces_df)
-        self.db.expand_known_nonce(repeated_nonces_df)
 
     def __crack_from_known_nonces_and_keys(self):
-        crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()
+        crackable_keys = self.db.get_crackable_keys()
+        crackable_nonces = self.db.get_crackable_nonces()
 
         while len(crackable_keys.index) > 0 or len(crackable_nonces.index) > 0:
             if len(crackable_keys.index) > 0:
@@ -112,7 +113,8 @@ class ECDSABreaker:
                 self.db.expand_known_nonce(crackable_nonces)
 
             self.log_stats(level=1)
-            crackable_keys, crackable_nonces = self.db.get_crackable_keys_and_nonces()
+            crackable_keys = self.db.get_crackable_keys()
+            crackable_nonces = self.db.get_crackable_nonces()
 
     def __crack_from_sig_equation_system(self):
         def build_system_matrix(rows, pubkeys: list[str], r: list[int]):
