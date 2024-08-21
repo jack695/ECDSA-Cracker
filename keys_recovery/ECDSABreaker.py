@@ -37,20 +37,16 @@ class ECDSABreaker:
         self.log_stats(level=1)
 
         logger.info(
-            "ROUND 1: Derive nonces from known private keys and private keys from known nonces"
-        )
-        self.__crack_from_known_nonces_and_keys()
-
-        logger.info(
-            "ROUND 2: Derive nonces and private keys from signatures that form a system of linear equations."
+            "ROUND 1: Derive nonces and private keys from signatures that form a system of linear equations."
         )
         self.__crack_from_sig_equation_system()
         self.log_stats(level=1)
 
-        logger.info(
-            "ROUND 3: Derive nonces from known private keys and private keys from known nonces"
+        # NOTE: Temporarily disabled before the implementation of the new method
+        """logger.info(
+            "ROUND 2: Derive nonces from known private keys and private keys from known nonces"
         )
-        self.__crack_from_known_nonces_and_keys()
+        self.__crack_from_known_nonces_and_keys()"""
 
         logger.info("-" * 25 + "RESULTS: " + "-" * 25)
         self.log_stats()
