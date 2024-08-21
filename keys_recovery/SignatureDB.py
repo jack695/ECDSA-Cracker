@@ -59,8 +59,9 @@ class SignatureDB:
             .aggregate(
                 s_cnt=("s", "nunique"),
                 digest_cnt=("h", "nunique"),
-                s=("s", lambda s: s.drop_duplicates().head(2)),
-                digests=("h", lambda s: s.drop_duplicates().head(2)),
+                s=("s", lambda s: s.head(2).to_list()),
+                digests=("h", lambda s: s.head(2).to_list()),
+                lineage=("sig_id", lambda s: s.head(2).to_list()),
                 vulnerable_timestamp=(
                     "block_timestamp",
                     lambda s: s.head(2).tail(1),

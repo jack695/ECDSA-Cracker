@@ -72,8 +72,9 @@ class ECDSABreaker:
             axis=1,
             result_type="expand",
         )
-        self.db.expand_known_nonce(repeated_nonces_df)
         repeated_nonces_df["vulnerability_source"] = "repeated_nonces"
+
+        self.db.expand_known_nonce(repeated_nonces_df)
         self.db.expand_cracked_keys(repeated_nonces_df)
 
     def __crack_from_known_nonces_and_keys(self):
@@ -153,6 +154,7 @@ class ECDSABreaker:
             )
             rows["vulnerable_timestamp"] = rows["block_timestamp"].max()
             rows["vulnerability_source"] = "equation_system"
+            rows["lineage"] = rows.apply(lambda _: rows["sig_id"].to_list(), axis=1)
             self.db.expand_cracked_keys(rows)
 
             rows["nonce"] = rows.apply(lambda row: nonces[row["r"]], axis=1)

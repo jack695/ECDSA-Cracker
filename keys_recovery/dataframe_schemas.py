@@ -17,7 +17,7 @@ CrackedSignaturesSchema = pa.DataFrameSchema(
         "pubkey": pa.Column(str),
         "privkey": pa.Column(object),
         "vulnerability_source": pa.Column(str),
-        "sig_ids": pa.Column(list),
+        "lineage": pa.Column(list),
     }
 )
 
@@ -27,7 +27,7 @@ KnownNoncesSchema = pa.DataFrameSchema(
         "nonce": pa.Column(object),
         "vulnerable_timestamp": pa.Column("datetime64[ms, UTC]"),
         "vulnerability_source": pa.Column(str),
-        "sig_ids": pa.Column(list),
+        "lineage": pa.Column(list),
     }
 )
 
