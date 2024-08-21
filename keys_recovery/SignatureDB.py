@@ -17,6 +17,7 @@ from keys_recovery.dataframe_schemas import (
     UncrackedCyclingSignaturesSchema,
     UncrackedSignaturesSchema,
     check_output_format,
+    check_input_format,
 )
 
 SignatureFolder = namedtuple(
@@ -256,7 +257,7 @@ class SignatureDB:
         sig_df["r"] = sig_df["r"].apply(lambda r: int(r, 16))
         sig_df["s"] = sig_df["s"].apply(lambda r: int(r, 16))
         sig_df["h"] = sig_df["message digest"].apply(lambda r: int(r, 16))
-        sig_df["blockchain_source_id"] = sig_df.apply(
+        sig_df["sig_id"] = sig_df.apply(
             lambda row: (
                 row["chain"]
                 + ":"
