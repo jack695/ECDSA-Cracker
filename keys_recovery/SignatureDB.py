@@ -95,29 +95,11 @@ class SignatureDB:
             self._cracked_keys_df = cracked_keys_df.copy(deep=True)
         else:
             self._cracked_keys_df = pd.concat([self._cracked_keys_df, cracked_keys_df])
-            self._cracked_keys_df.sort_values(by="vulnerable_timestamp").groupby(
-                by="pubkey", sort=False
-            ).head(1)
-
-    @check_output_format(CrackableSignaturesSchema)
-    def get_crackable_keys(self) -> pd.DataFrame:
-        """Return the uncracked keys that could be recovered as they used known nonces."""
-        crackable_keys = pd.merge(
-            self._uncracked_keys_df,
-            self._known_nonces_df,
-            on="r",
-            how="inner",
-        )
-        crackable_keys["vulnerable_timestamp"] = crackable_keys[
-            ["block_timestamp", "vulnerable_timestamp"]
-        ].max(axis=1)
-        crackable_keys = crackable_keys.drop(columns=["block_timestamp"])
-
-        crackable_keys = (
-            crackable_keys.sort_values(by="vulnerable_timestamp")
-            .groupby(by=["r", "pubkey"], sort=False)
-            .head(1)
-        )
+            self._cracked_keys_df = (
+                self._cracked_keys_df.sort_values(by="vulnerable_timestamp")
+                .groupby(by="pubkey", sort=False)
+                .head(1)
+            )
 
         crackable_keys = (
             pd.merge(
