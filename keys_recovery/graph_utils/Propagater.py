@@ -1,7 +1,8 @@
+from typing import Iterator, Type
 import networkx as nx
 import pandas as pd
 from keys_recovery.dataframe_schemas import CrackedSignaturesSchema, KnownNoncesSchema
-from keys_recovery.graph_utils.Node import KeyNode, RNode
+from keys_recovery.graph_utils.Node import KeyNode, Node, RNode
 from keys_recovery.graph_utils.Sig import Sig
 import ecdsa
 
@@ -35,45 +36,49 @@ class Propagater:
                         n.lineage,
                     ]
                 )
+        dtypes = {
+            col: str(CrackedSignaturesSchema.dtypes[col])
+            for col in CrackedSignaturesSchema.columns
+        }
+        dtypes.pop("lineage")
         return (
             pd.DataFrame(
                 data=data,
                 columns=CrackedSignaturesSchema.columns,
             )
             .dropna()
-            .astype(
-                {
-                    "vulnerable_timestamp": str(
-                        CrackedSignaturesSchema.dtypes["vulnerable_timestamp"]
-                    )
-                }
-            )
+            .astype(dtypes)
         )
 
     def build_known_nonces_df(self):
         data = []
-        for n in self.G:
-            if type(n) == RNode:
-                data.append(
-                    [
-                        n.r,
-                        n.nonce,
-                        n.vulnerable_timestamp,
-                        n.vulnerability_source,
-                        n.lineage,
-                    ]
-                )
+        for n in self.__get_cracked_nodes(RNode):
+            data.append(
+                [
+                    n.r,
+                    n.nonce,
+                    n.vulnerable_timestamp,
+                    n.vulnerability_source,
+                    n.lineage,
+                ]
+            )
+
+        dtypes = {
+            col: str(KnownNoncesSchema.dtypes[col]) for col in KnownNoncesSchema.columns
+        }
+        dtypes.pop("lineage")
         return (
             pd.DataFrame(data=data, columns=KnownNoncesSchema.columns)
             .dropna()
-            .astype(
-                {
-                    "vulnerable_timestamp": str(
-                        CrackedSignaturesSchema.dtypes["vulnerable_timestamp"]
-                    )
-                }
-            )
+            .astype(dtypes)
         )
+
+    def __get_cracked_nodes(
+        self, nodeClass: Type[KeyNode | RNode]
+    ) -> Iterator[KeyNode | RNode]:
+        for n in self.G:
+            if type(n) == nodeClass and n.cracked:
+                yield n
 
     def __set_edges(
         self,
