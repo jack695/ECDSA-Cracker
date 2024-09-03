@@ -247,5 +247,6 @@ class SignatureDB:
             ),
             axis=1,
         )
+        # TODO check that the public keys are encoded using the compressed format
 
         return sig_df
