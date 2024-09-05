@@ -26,19 +26,68 @@ SignatureFolder = namedtuple(
 
 class SignatureDB:
 
-    def __init__(self, signature_folders: list[SignatureFolder], curve: Curve):
+    UNCRACKED_SIG_FILE = "uncracked_keys_df.parquet"
+    CRACKED_SIG_FILE = "cracked_keys_df.parquet"
+    KNOWN_NONCES_FILE = "known_nonces_df.parquet"
+
+    def __init__(
+        self,
+        uncracked_keys_df: pd.DataFrame,
+        cracked_keys_df: pd.DataFrame,
+        known_nonces_df: pd.DataFrame,
+        curve: Curve,
+    ):
         self.curve = curve
-        self._uncracked_keys_df = self._fetch_data(signature_folders)
-        self._cracked_keys_df = pd.DataFrame(
-            columns=CrackedSignaturesSchema.columns,
-            dtype=CrackedSignaturesSchema.dtype,
-        )
-        self._known_nonces_df = pd.DataFrame(
-            columns=KnownNoncesSchema.columns, dtype=KnownNoncesSchema.dtype
-        )
+        self._uncracked_keys_df = uncracked_keys_df
+        self._cracked_keys_df = cracked_keys_df
+        self._known_nonces_df = known_nonces_df
 
         self._n_pubkeys = self._uncracked_keys_df["pubkey"].nunique()
         self._n_r = self._uncracked_keys_df["r"].nunique()
+
+    @classmethod
+    def from_scratch(cls, signature_folders: list[SignatureFolder], curve: Curve):
+        uncracked_keys_df = cls._fetch_data(signature_folders, curve)
+        cracked_keys_df = pd.DataFrame(
+            columns=CrackedSignaturesSchema.columns,
+            dtype=CrackedSignaturesSchema.dtype,
+        )
+        known_nonces_df = pd.DataFrame(
+            columns=KnownNoncesSchema.columns, dtype=KnownNoncesSchema.dtype
+        )
+
+        return cls(uncracked_keys_df, cracked_keys_df, known_nonces_df, curve)
+
+    @classmethod
+    def from_dump(cls, dump_dir_path: str, curve: Curve):
+        uncracked_keys_dump_path = os.path.join(dump_dir_path, cls.UNCRACKED_SIG_FILE)
+        uncracked_keys_df = cls.convert_rsh(pd.read_parquet(uncracked_keys_dump_path))
+
+        cracked_keys_dump_path = os.path.join(dump_dir_path, cls.CRACKED_SIG_FILE)
+        cracked_keys_df = cls.convert_rsh(pd.read_parquet(cracked_keys_dump_path))
+        cracked_keys_df["lineage"] = cracked_keys_df["lineage"].apply(list)
+
+        known_nonces_dump_path = os.path.join(dump_dir_path, cls.KNOWN_NONCES_FILE)
+        known_nonces_df = cls.convert_rsh(pd.read_parquet(known_nonces_dump_path))
+        known_nonces_df["lineage"] = known_nonces_df["lineage"].apply(list)
+
+        return cls(uncracked_keys_df, cracked_keys_df, known_nonces_df, curve)
+
+    def dump_db(self, out_dir: str):
+        uncracked_keys_dump_path = os.path.join(out_dir, self.UNCRACKED_SIG_FILE)
+        self.convert_rsh(self._uncracked_keys_df.copy(), to_int=False).to_parquet(
+            uncracked_keys_dump_path
+        )
+
+        cracked_keys_dump_path = os.path.join(out_dir, self.CRACKED_SIG_FILE)
+        self.convert_rsh(self._cracked_keys_df.copy(), to_int=False).to_parquet(
+            cracked_keys_dump_path
+        )
+
+        known_nonces_dump_path = os.path.join(out_dir, self.KNOWN_NONCES_FILE)
+        self.convert_rsh(self._known_nonces_df.copy(), to_int=False).to_parquet(
+            known_nonces_dump_path
+        )
 
     @property
     @check_output_format(UncrackedSignaturesSchema)
@@ -205,8 +254,11 @@ class SignatureDB:
         )
         all_private_keys_with_addresses.to_parquet(out_file)
 
+    @classmethod
     @check_output_format(UncrackedSignaturesSchema)
-    def _fetch_data(self, signature_folders: list[SignatureFolder]) -> pd.DataFrame:
+    def _fetch_data(
+        cls, signature_folders: list[SignatureFolder], curve: Curve
+    ) -> pd.DataFrame:
         chunks = []
         for folder in signature_folders:
             signatures_files = glob.glob(os.path.join(folder.path, "*.parquet"))
@@ -224,7 +276,7 @@ class SignatureDB:
                                 row["r"],
                                 row["s"],
                                 row["message digest"],
-                                curve=self.curve,
+                                curve=curve,
                             ),
                             axis=1,
                         )
@@ -234,9 +286,8 @@ class SignatureDB:
 
         sig_df = pd.concat(chunks)
         # Let's use the native python int to support any size to support different schemes and curve despite the loss of performance.
-        sig_df["r"] = sig_df["r"].apply(lambda r: int(r, 16))
-        sig_df["s"] = sig_df["s"].apply(lambda r: int(r, 16))
-        sig_df["h"] = sig_df["message digest"].apply(lambda r: int(r, 16))
+        sig_df = sig_df.rename(columns={"message digest": "h"})
+        sig_df = cls.convert_rsh(sig_df)
         sig_df["sig_id"] = sig_df["chain"].str.cat(
             [sig_df["transaction_hash"], sig_df["input_index"].astype(str)],
             sep=":",
@@ -244,3 +295,17 @@ class SignatureDB:
         # TODO check that the public keys are encoded using the compressed format
 
         return sig_df
+
+    @classmethod
+    def convert_rsh(cls, sig_df: pd.DataFrame, to_int: bool = True) -> pd.DataFrame:
+        cols = ["r", "s", "h", "nonce", "privkey"]
+        if to_int:
+            for col in cols:
+                if col in sig_df.columns:
+                    sig_df[col] = sig_df[col].apply(lambda val: int(val, 16))
+            return sig_df
+        else:
+            for col in cols:
+                if col in sig_df.columns:
+                    sig_df[col] = sig_df[col].apply(hex)
+            return sig_df

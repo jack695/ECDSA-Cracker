@@ -22,16 +22,29 @@ logging.basicConfig(
 
 
 class ECDSABreaker:
-    def __init__(
-        self, signature_folders: list[SignatureFolder], curve: Curve, out_folder: str
-    ) -> None:
-        logger.info(
-            "Loading the signatures... This might take some time especially if the option to check the signatures is enabled."
-        )
-        self.db = SignatureDB(signature_folders, curve=curve)
+    def __init__(self, db: SignatureDB, curve: Curve, out_folder: str) -> None:
+        self.db = db
         self.log_stats()
         self.curve = curve
         self.out_folder = out_folder
+
+    @classmethod
+    def from_scratch(
+        cls, signature_folders: list[SignatureFolder], curve: Curve, out_folder: str
+    ):
+        logger.info(
+            "Loading the signatures... This might take some time especially if the option to check the signatures is enabled."
+        )
+        db = SignatureDB.from_scratch(signature_folders, curve=curve)
+
+        return cls(db, curve, out_folder)
+
+    @classmethod
+    def from_dump(cls, dump_dir_path: str, curve: Curve, out_folder: str):
+        logger.info("Restoring the database from a previous run...")
+        db = SignatureDB.from_dump(dump_dir_path, curve=curve)
+
+        return cls(db, curve, out_folder)
 
     def crack(self):
         logger.info("ROUND 0: Derive nonces and private keys from repeated nonces")
@@ -53,6 +66,7 @@ class ECDSABreaker:
         logger.info("-" * 25 + "RESULTS: " + "-" * 25)
         self.log_stats()
         self.db.save_addresses(os.path.join(self.out_folder, "addresses.parquet"))
+        self.db.dump_db(self.out_folder)
 
     def log_stats(self, level=0):
         stats = self.db.get_stats()
@@ -158,6 +172,9 @@ class ECDSABreaker:
 if __name__ == "__main__":
     signature_folders = [
         SignatureFolder(
+            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/eth",
+        ),
+        SignatureFolder(
             "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/bch",
         ),
         SignatureFolder(
@@ -176,7 +193,7 @@ if __name__ == "__main__":
 
     out_folder = "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/confidential"
 
-    breaker = ECDSABreaker(
+    breaker = ECDSABreaker.from_scratch(
         signature_folders,
         ecdsa.SECP256k1,
         out_folder,
