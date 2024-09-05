@@ -210,42 +210,36 @@ class SignatureDB:
         chunks = []
         for folder in signature_folders:
             signatures_files = glob.glob(os.path.join(folder.path, "*.parquet"))
-            chunk = pd.concat(
-                pd.read_parquet(parquet_file) for parquet_file in signatures_files
-            )
-            # Optional: round of filtering
-            chunk = (
-                chunk
-                if not folder.check_signatures
-                else chunk[
-                    chunk.apply(
-                        lambda row: is_signature_valid(
-                            row["pubkey"],
-                            row["r"],
-                            row["s"],
-                            row["message digest"],
-                            curve=self.curve,
-                        ),
-                        axis=1,
-                    )
-                ]
-            )
-            chunks.append(chunk)
+            for parquet_file in signatures_files:
+                # Some signatures do not have an 'input' index field, e.g. eth calls.
+                chunk = pd.read_parquet(parquet_file).fillna("")
+                # Optional: round of filtering
+                chunk = (
+                    chunk
+                    if not folder.check_signatures
+                    else chunk[
+                        chunk.apply(
+                            lambda row: is_signature_valid(
+                                row["pubkey"],
+                                row["r"],
+                                row["s"],
+                                row["message digest"],
+                                curve=self.curve,
+                            ),
+                            axis=1,
+                        )
+                    ]
+                )
+                chunks.append(chunk)
 
         sig_df = pd.concat(chunks)
         # Let's use the native python int to support any size to support different schemes and curve despite the loss of performance.
         sig_df["r"] = sig_df["r"].apply(lambda r: int(r, 16))
         sig_df["s"] = sig_df["s"].apply(lambda r: int(r, 16))
         sig_df["h"] = sig_df["message digest"].apply(lambda r: int(r, 16))
-        sig_df["sig_id"] = sig_df.apply(
-            lambda row: (
-                row["chain"]
-                + ":"
-                + row["transaction_hash"]
-                + ":"
-                + str(row["input_index"])
-            ),
-            axis=1,
+        sig_df["sig_id"] = sig_df["chain"].str.cat(
+            [sig_df["transaction_hash"], sig_df["input_index"].astype(str)],
+            sep=":",
         )
         # TODO check that the public keys are encoded using the compressed format
 
