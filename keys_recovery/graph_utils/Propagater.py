@@ -25,30 +25,25 @@ class Propagater:
 
     def build_cracked_keys_df(self):
         data = []
-        for n in self.G:
-            if type(n) == KeyNode:
-                data.append(
-                    [
-                        n.pubkey,
-                        n.privkey,
-                        n.vulnerable_timestamp,
-                        n.vulnerability_source,
-                        n.lineage,
-                    ]
-                )
+        for n in self.__get_cracked_nodes(KeyNode):
+            data.append(
+                [
+                    n.pubkey,
+                    n.privkey,
+                    n.vulnerable_timestamp,
+                    n.vulnerability_source,
+                    n.lineage,
+                ]
+            )
         dtypes = {
             col: str(CrackedSignaturesSchema.dtypes[col])
             for col in CrackedSignaturesSchema.columns
         }
         dtypes.pop("lineage")
-        return (
-            pd.DataFrame(
-                data=data,
-                columns=CrackedSignaturesSchema.columns,
-            )
-            .dropna()
-            .astype(dtypes)
-        )
+        return pd.DataFrame(
+            data=data,
+            columns=CrackedSignaturesSchema.columns,
+        ).astype(dtypes)
 
     def build_known_nonces_df(self):
         data = []
@@ -67,11 +62,7 @@ class Propagater:
             col: str(KnownNoncesSchema.dtypes[col]) for col in KnownNoncesSchema.columns
         }
         dtypes.pop("lineage")
-        return (
-            pd.DataFrame(data=data, columns=KnownNoncesSchema.columns)
-            .dropna()
-            .astype(dtypes)
-        )
+        return pd.DataFrame(data=data, columns=KnownNoncesSchema.columns).astype(dtypes)
 
     def __get_cracked_nodes(
         self, nodeClass: Type[KeyNode | RNode]
