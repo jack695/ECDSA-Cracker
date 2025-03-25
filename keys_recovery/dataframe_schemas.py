@@ -54,8 +54,8 @@ def check_input_format(schema, nth_arg):
             if len(df.index) > 0:
                 df = df[schema.columns.keys()]
                 schema.validate(df)
-            function(*args[:nth_arg], df, *args[nth_arg + 1 :], **kwargs)
-            return df
+            ret = function(*args[:nth_arg], df, *args[nth_arg + 1 :], **kwargs)
+            return ret
 
         return wrapper
 
