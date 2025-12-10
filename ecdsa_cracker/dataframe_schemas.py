@@ -1,4 +1,4 @@
-import pandera as pa
+import pandera.pandas as pa
 
 UNCRACKED_COMMON_COLUMNS = {
     "r": pa.Column(object),

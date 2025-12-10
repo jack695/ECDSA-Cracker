@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ECDSA-Cracker"
+version = "0.1.0"
+description = "A tool for recovering ECDSA private keys and nonces from signature vulnerabilities"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "jack695"}
+]
+keywords = ["ecdsa", "cryptography", "key-recovery", "signature-analysis"]
+
+dependencies = [
+    "ecdsa>=0.18.0",
+    "pandas>=1.3.0",
+    "pandera>=0.14.0",
+    "networkx>=3.0",
+    "sympy>=1.12",
+    "numpy>=1.21.0",
+    "matplotlib>=3.5.0",
+    "fastparquet>=2024.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0.0",
+]
+
+[project.urls]
+Repository = "https://github.com/jack695/ECDSA-Cracker"
+Issues = "https://github.com/jack695/ECDSA-Cracker/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ecdsa_cracker*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311", "py312"]

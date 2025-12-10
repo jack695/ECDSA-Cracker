@@ -1,0 +1,4 @@
+.venv
+*.egg-info
+local
+**/__pycache__

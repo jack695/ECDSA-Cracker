@@ -1,6 +1,6 @@
 import networkx as nx
 from abc import ABC, abstractmethod
-from keys_recovery.ecdsa_helper import (
+from ecdsa_cracker.ecdsa_helper import (
     derive_nonce_from_known_private_key,
     derive_private_key_from_known_nonce,
 )

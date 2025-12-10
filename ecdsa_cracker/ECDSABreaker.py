@@ -1,8 +1,8 @@
 import os
 import ecdsa
 from ecdsa.curves import Curve
-from keys_recovery.SignatureDB import SignatureDB, SignatureFolder
-from keys_recovery.ecdsa_helper import (
+from ecdsa_cracker.SignatureDB import SignatureDB, SignatureFolder
+from ecdsa_cracker.ecdsa_helper import (
     derive_nonce_from_known_private_key,
     derive_private_key_from_known_nonce,
     derive_private_key_from_repeated_nonces,
@@ -10,7 +10,7 @@ from keys_recovery.ecdsa_helper import (
 )
 import logging
 
-from keys_recovery.graph_utils.Propagater import Propagater
+from ecdsa_cracker.graph_utils.Propagater import Propagater
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -26,6 +26,8 @@ class ECDSABreaker:
         self.db = db
         self.log_stats()
         self.curve = curve
+        if not os.path.exists(out_folder):
+            os.makedirs(out_folder)
         self.out_folder = out_folder
 
     @classmethod
@@ -65,7 +67,6 @@ class ECDSABreaker:
 
         logger.info("-" * 25 + "RESULTS: " + "-" * 25)
         self.log_stats()
-        self.db.save_addresses(os.path.join(self.out_folder, "addresses.parquet"))
         self.db.dump_db(self.out_folder)
 
     def log_stats(self, level=0):
@@ -144,7 +145,7 @@ class ECDSABreaker:
 
         cycle_signatures = self.db.get_cycle_signatures()
         logger.info(
-            f"   {cycle_signatures["cycle_id"].nunique()} basis cycles have been found in the bi-partite graph formed by the public keys and 'r' values.",
+            f"   {cycle_signatures['cycle_id'].nunique()} basis cycles have been found in the bi-partite graph formed by the public keys and 'r' values.",
         )
         cycle_signatures = cycle_signatures.set_index(keys="cycle_id")
 
@@ -167,35 +168,3 @@ class ECDSABreaker:
             self.db.expand_known_nonce(rows)
 
         cycle_signatures.reset_index()
-
-
-if __name__ == "__main__":
-    signature_folders = [
-        SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/eth",
-        ),
-        SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/bch",
-        ),
-        SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/btc"
-        ),
-        SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/dash"
-        ),
-        SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/ltc"
-        ),
-        SignatureFolder(
-            "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/signatures/doge"
-        ),
-    ]
-
-    out_folder = "/Users/vincent/Documents/PhD/Blockchains/UTXO/ecdsa-signatures/data/confidential"
-
-    breaker = ECDSABreaker.from_scratch(
-        signature_folders,
-        ecdsa.SECP256k1,
-        out_folder,
-    )
-    breaker.crack()

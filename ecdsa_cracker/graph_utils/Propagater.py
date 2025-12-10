@@ -1,9 +1,9 @@
 from typing import Iterator, Type
 import networkx as nx
 import pandas as pd
-from keys_recovery.dataframe_schemas import CrackedSignaturesSchema, KnownNoncesSchema
-from keys_recovery.graph_utils.Node import KeyNode, Node, RNode
-from keys_recovery.graph_utils.Sig import Sig
+from ecdsa_cracker.dataframe_schemas import CrackedSignaturesSchema, KnownNoncesSchema
+from ecdsa_cracker.graph_utils.Node import KeyNode, Node, RNode
+from ecdsa_cracker.graph_utils.Sig import Sig
 import ecdsa
 
 

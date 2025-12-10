@@ -4,13 +4,10 @@ from typing import Tuple
 import pandas as pd
 import glob
 import os
-from keys_recovery.ecdsa_helper import is_signature_valid
+from ecdsa_cracker.ecdsa_helper import is_signature_valid
 from ecdsa.curves import Curve
 import networkx as nx
-from lib.script_parser.utxo_utils.encoding.address import (
-    generate_flatten_addresses,
-)
-from keys_recovery.dataframe_schemas import (
+from ecdsa_cracker.dataframe_schemas import (
     CrackedSignaturesSchema,
     KnownNoncesSchema,
     UncrackedCyclingSignaturesSchema,
@@ -232,27 +229,6 @@ class SignatureDB:
                 vulnerability_source = df.loc[key].vulnerability_source
 
         return lineage
-
-    def save_addresses(self, out_file: str):
-        all_private_keys_with_addresses = (
-            self._cracked_keys_df[["pubkey", "vulnerable_timestamp"]]
-            .sort_values(["vulnerable_timestamp"])
-            .groupby(by=["pubkey"], sort=False)
-            .head(1)
-            .drop_duplicates()
-            .reset_index()
-        )
-        all_private_keys_with_addresses[
-            ["chain_address", "pubkey_format", "address"]
-        ] = all_private_keys_with_addresses.apply(
-            lambda row: generate_flatten_addresses(row["pubkey"]),
-            axis=1,
-            result_type="expand",
-        )
-        all_private_keys_with_addresses = all_private_keys_with_addresses.explode(
-            ["chain_address", "pubkey_format", "address"]
-        )
-        all_private_keys_with_addresses.to_parquet(out_file)
 
     @classmethod
     @check_output_format(UncrackedSignaturesSchema)
