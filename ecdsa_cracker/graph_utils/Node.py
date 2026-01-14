@@ -73,7 +73,7 @@ class KeyNode(Node):
             )
 
         edge = G[origin][self]["sig"]
-        new_ts = max(edge.block_timestamp, origin.vulnerable_timestamp)
+        new_ts = max(edge.timestamp, origin.vulnerable_timestamp)
         if not self.cracked or new_ts < self.vulnerable_timestamp:
             if not self.cracked:
                 privkey = derive_private_key_from_known_nonce(
@@ -117,7 +117,7 @@ class RNode(Node):
             )
 
         edge = G[origin][self]["sig"]
-        new_ts = max(edge.block_timestamp, origin.vulnerable_timestamp)
+        new_ts = max(edge.timestamp, origin.vulnerable_timestamp)
         if not self.cracked or new_ts < self.vulnerable_timestamp:
             if not self.cracked:
                 nonce = derive_nonce_from_known_private_key(

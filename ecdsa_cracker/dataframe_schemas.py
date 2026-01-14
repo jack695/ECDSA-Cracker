@@ -6,7 +6,7 @@ UNCRACKED_COMMON_COLUMNS = {
     "h": pa.Column(object),
     "pubkey": pa.Column(str),
     "sig_id": pa.Column(str),
-    "block_timestamp": pa.Column("datetime64[ms, UTC]", coerce=True),
+    "timestamp": pa.Column("datetime64[ms, UTC]", coerce=True),
 }
 
 CRACKED_COMMON_COLUMNS = {
@@ -18,11 +18,11 @@ CRACKED_COMMON_COLUMNS = {
 UncrackedSignaturesSchema = pa.DataFrameSchema({**UNCRACKED_COMMON_COLUMNS})
 
 CrackedSignaturesSchema = pa.DataFrameSchema(
-    {"pubkey": pa.Column(str), "privkey": pa.Column(object), **CRACKED_COMMON_COLUMNS}
+    {"pubkey": pa.Column(str), "privkey": pa.Column(object, coerce=True), **CRACKED_COMMON_COLUMNS}
 )
 
 KnownNoncesSchema = pa.DataFrameSchema(
-    {"r": pa.Column(object), "nonce": pa.Column(object), **CRACKED_COMMON_COLUMNS}
+    {"r": pa.Column(object), "nonce": pa.Column(object, coerce=True), **CRACKED_COMMON_COLUMNS}
 )
 
 UncrackedCyclingSignaturesSchema = pa.DataFrameSchema(

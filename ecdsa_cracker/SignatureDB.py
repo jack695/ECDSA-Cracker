@@ -112,7 +112,7 @@ class SignatureDB:
     def find_repeated_nonces(self) -> pd.DataFrame:
         # Group by pubkey and r. Keep two records for every row.
         grouped_df = (
-            self._uncracked_keys_df.sort_values(by=["block_timestamp"])
+            self._uncracked_keys_df.sort_values(by=["timestamp"])
             .groupby(by=["pubkey", "r", "s", "h"], sort=False)
             .head(1)
             .groupby(by=["pubkey", "r"], sort=False)
@@ -123,7 +123,7 @@ class SignatureDB:
                 digests=("h", lambda s: s.head(2).to_list()),
                 lineage=("sig_id", lambda s: s.head(2).to_list()),
                 vulnerable_timestamp=(
-                    "block_timestamp",
+                    "timestamp",
                     lambda s: s.head(2).tail(1),
                 ),  # The signatures and 'r' values become vulnerable as soon as the second signature is published
             )
@@ -189,7 +189,7 @@ class SignatureDB:
             self._uncracked_keys_df.merge(
                 indexes_to_fetch_df, how="inner", on=["r", "pubkey"]
             )
-            .sort_values(by="block_timestamp")
+            .sort_values(by="timestamp")
             .groupby(by=["r", "pubkey", "cycle_id"])
             .head(1)
         )
@@ -264,10 +264,6 @@ class SignatureDB:
         # Let's use the native python int to support any size to support different schemes and curve despite the loss of performance.
         sig_df = sig_df.rename(columns={"message digest": "h"})
         sig_df = cls.convert_rsh(sig_df)
-        sig_df["sig_id"] = sig_df["chain"].str.cat(
-            [sig_df["transaction_hash"], sig_df["input_index"].astype(str)],
-            sep=":",
-        )
         # TODO check that the public keys are encoded using the compressed format
 
         return sig_df

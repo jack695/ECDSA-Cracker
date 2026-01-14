@@ -8,7 +8,7 @@ class Sig:
         r: int,
         s: int,
         h: int,
-        block_timestamp: pd.Timestamp,
+        timestamp: pd.Timestamp,
         sig_id: str,
     ) -> None:
         self.pubkey = pubkey
@@ -16,7 +16,7 @@ class Sig:
         self.s = s
         self.h = h
         self.primary_key = r
-        self.block_timestamp = block_timestamp
+        self.timestamp = timestamp
         self.sig_id = sig_id
 
         self.cracked = False

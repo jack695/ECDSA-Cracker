@@ -97,7 +97,7 @@ class ECDSABreaker:
     def __crack_from_known_nonces_and_keys(self):
         uncracked_keys_df = self.db.uncracked_keys_df
         uncracked_keys_df = (
-            uncracked_keys_df.sort_values(by="block_timestamp")
+            uncracked_keys_df.sort_values(by="timestamp")
             .groupby(by=["r", "pubkey"], sort=False)
             .head(1)
         )
@@ -145,7 +145,7 @@ class ECDSABreaker:
 
         cycle_signatures = self.db.get_cycle_signatures()
         logger.info(
-            f"   {cycle_signatures['cycle_id'].nunique()} basis cycles have been found in the bi-partite graph formed by the public keys and 'r' values.",
+            f"   {cycle_signatures["cycle_id"].nunique()} basis cycles have been found in the bi-partite graph formed by the public keys and 'r' values.",
         )
         cycle_signatures = cycle_signatures.set_index(keys="cycle_id")
 
@@ -159,7 +159,7 @@ class ECDSABreaker:
             rows["privkey"] = rows.apply(
                 lambda row: private_keys[row["pubkey"]], axis=1
             )
-            rows["vulnerable_timestamp"] = rows["block_timestamp"].max()
+            rows["vulnerable_timestamp"] = rows["timestamp"].max()
             rows["vulnerability_source"] = "equation_system"
             rows["lineage"] = rows.apply(lambda _: rows["sig_id"].to_list(), axis=1)
             self.db.expand_cracked_keys(rows)

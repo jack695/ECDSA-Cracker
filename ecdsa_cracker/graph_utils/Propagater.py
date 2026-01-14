@@ -96,7 +96,7 @@ class Propagater:
                 tuple.r,  # type: ignore
                 tuple.s,  # type: ignore
                 tuple.h,  # type: ignore
-                tuple.block_timestamp,  # type: ignore
+                tuple.timestamp,  # type: ignore
                 tuple.sig_id,  # type: ignore
             )
             edges.append([r_nodes[tuple.r], key_nodes[tuple.pubkey], sig])
